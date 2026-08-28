@@ -22,13 +22,16 @@ namespace GflChibiDesktop
 
         private void canvasBackgroundColorPicker_Canceled(object sender, System.EventArgs e)
         {
-            btn_Close.Command.Execute(null);
+            btn_Cancel.Command.Execute(null);
         }
 
         private void btn_OK_Click(object sender, System.Windows.RoutedEventArgs e)
         {
             App.globalValues.DownloadSource = tb_downloadSource.Text;
-            btn_Close.Command.Execute(null);
+            // 同时写回持久化设置，保证立即生效（下载/预览读取当前生效值）
+            Properties.Settings.Default.DownloadSource = tb_downloadSource.Text;
+            Properties.Settings.Default.Save();
+            btn_Cancel.Command.Execute(null);
         }
 
         private void btn_UpdateSources_Click(object sender, System.Windows.RoutedEventArgs e)
@@ -66,6 +69,17 @@ namespace GflChibiDesktop
 
                 lb_sources.Items.Add(listBoxItem);
             }
+
+            // 默认选中与当前下载源配置一致的项
+            string currentSource = tb_downloadSource.Text;
+            foreach (object item in lb_sources.Items)
+            {
+                if (item is ListBoxItem listBoxItem && listBoxItem.Tag is string[] tagString && tagString.Length > 3 && tagString[3] == currentSource)
+                {
+                    lb_sources.SelectedItem = listBoxItem;
+                    break;
+                }
+            }
         }
 
         private void lb_sources_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -75,7 +89,8 @@ namespace GflChibiDesktop
                 ListBoxItem item = (ListBoxItem)lb_sources.SelectedItem;
                 string[] tagString = (string[])item.Tag;
                 tb_downloadSource.Text = tagString[3];
-                tb_sourceInfo.Text = $"#{tagString[0]} - {tagString[1]}\n{tagString[2]}\n{tagString[3]}";
+                lbl_source.Content = tagString[1];
+                tb_sourceInfo.Text = tagString[2];
             }
         }
     }

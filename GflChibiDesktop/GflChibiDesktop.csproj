@@ -19,12 +19,11 @@
     <SelfContained>false</SelfContained>
     <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
     <NoWarn>$(NoWarn);SYSLIB0014;CA1416</NoWarn>
-    <AssemblyTitle>少女前线桌面Q宠</AssemblyTitle>
-    <Product>GflChibiDesktop</Product>
-    <AssemblyProduct>GflChibiDesktop</AssemblyProduct>
+	<AssemblyTitle>少女前线桌面Q宠</AssemblyTitle>
+	<Description>少女前线桌面Q宠</Description>
     <Company>BrightSu</Company>
+	<Product>GflChibiDesktop</Product>
     <Copyright>© 2020~2026 BrightSu</Copyright>
-    <Description>GflChibiDesktop</Description>
     <AssemblyVersion>1.1.0.1</AssemblyVersion>
     <FileVersion>1.1.0.1</FileVersion>
 	<InformationalVersion>20260828</InformationalVersion>
@@ -32,12 +31,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="HandyControl" Version="3.3.0" />
-    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.39" />
+    <PackageReference Include="HandyControl" Version="3.5.1" />
     <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.1.303" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="System.Configuration.ConfigurationManager" Version="6.0.0" />
-    <PackageReference Include="System.Drawing.Common" Version="6.0.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -55,3 +52,5 @@
   </ItemGroup>
 
 </Project>
+
+

@@ -1108,8 +1108,7 @@ namespace GflChibiDesktop.Windows
             {
                 DisplayName = DisplayName,
                 SkeletonFile = SpineFile,
-                AtlasFile = AtlasFile,
-                NewInstance = chb_force_load.IsChecked == true
+                AtlasFile = AtlasFile
             });
             tvAfterSelect();
         }

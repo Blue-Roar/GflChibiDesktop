@@ -54,10 +54,10 @@ namespace GflChibiDesktop
         public readonly Version productVersion = new Version(((AssemblyFileVersionAttribute)Attribute.GetCustomAttribute(Assembly.GetExecutingAssembly(), typeof(AssemblyFileVersionAttribute))).Version);
         public readonly Version productBuild = Assembly.GetExecutingAssembly().GetName().Version;
         public readonly string currentBuild = ((AssemblyInformationalVersionAttribute)Attribute.GetCustomAttribute(Assembly.GetExecutingAssembly(), typeof(AssemblyInformationalVersionAttribute))).InformationalVersion;
-        public string homepageLink = "https://projects.brightsu.cn/gfl-chibi-desktop";
+        public string homepageLink = "https://projects.brightsu.cn/GflChibiDesktop/V1/";
         public string repoLink = "https://github.com/Blue-Roar/GflChibiDesktop";
-        public string updateLink = "https://projects.brightsu.cn/gfl-chibi-desktop/update";
-        public string donateLink = "https://projects.brightsu.cn/gfl-chibi-desktop/donate";
+        public string updateLink = "https://projects.brightsu.cn/GflChibiDesktop/V1/download";
+        public string donateLink = "https://projects.brightsu.cn/GflChibiDesktop/donate";
         public string extraStr = string.Empty;
         public string announcementMsg = string.Empty;
         public string chibiListLink = "https://api.brightsu.cn/GFL/chibi_list";
@@ -666,8 +666,8 @@ namespace GflChibiDesktop
         public void ShowOptions()
         {
             _options.Show();
-            _options.Left = Left + Mouse.GetPosition(this).X - (_options.ActualWidth / 2);
-            _options.Top = Top + Mouse.GetPosition(this).Y - (_options.titleBar.ActualHeight / 2);
+            //_options.Left = Left + Mouse.GetPosition(this).X - (_options.ActualWidth / 2);
+            //_options.Top = Top + Mouse.GetPosition(this).Y - (_options.ActualHeight / 2);
             _options.Focus();
         }
 

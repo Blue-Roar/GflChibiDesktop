@@ -93,7 +93,7 @@
                         <Button x:Name="btn_deleteCG" BorderThickness="0" Grid.Column="1" Foreground="{DynamicResource DangerBrush}" hc:IconElement.Geometry="{StaticResource TrashGeometry}" Click="btn_deleteCG_Click" IsEnabled="False" ToolTip="删除选定人形的立绘" HorizontalAlignment="Right" Width="25" Padding="0,5,0,5" />
                     </Grid>
                 </Border>
-                <hc:SearchBar x:Name="sbQuery" Grid.Column="2" SearchStarted="SearchBar_SearchStarted" OverridesDefaultStyle="True" ToolTip="搜索人形" Margin="2,0,2,0" ShowClearButton="True" Height="28" />
+                <hc:SearchBar x:Name="sbQuery" Grid.Column="2" SearchStarted="SearchBar_SearchStarted" OverridesDefaultStyle="True" ToolTip="搜索人形" Margin="2,0,2,0" hc:InfoElement.ShowClearButton="True" Height="28" />
                 <Button x:Name="btn_downloadData" Style="{DynamicResource ButtonDashedSuccess}" Grid.Column="3" hc:IconElement.Geometry="{StaticResource DownloadGeometry}" Content="下载数据(_D)" IsEnabled="False" Click="btn_downloadData_Click" HorizontalAlignment="Stretch" Margin="2,0,2,0" ToolTip="下载选定人形的骨骼数据" VerticalAlignment="Stretch" Padding="5"/>
                 <Button x:Name="btn_deleteData" Style="{DynamicResource ButtonDashedDanger}" Grid.Column="3" hc:IconElement.Geometry="{StaticResource TrashGeometry}" Content="删除数据(_D)" IsEnabled="False" Click="btn_deleteData_Click" HorizontalAlignment="Stretch" Margin="2,0,2,0" ToolTip="删除选定人形的骨骼数据" VerticalAlignment="Stretch" Padding="5"/>
                 <Button x:Name="btn_loadData" Content="加载数据(_L)" VerticalAlignment="Stretch" Grid.Column="4" Click="btn_loadData_Click" Margin="2,0,2,0" IsEnabled="False" ToolTip="加载选定人形的骨骼数据" HorizontalAlignment="Stretch" Padding="5" />
@@ -102,10 +102,9 @@
                     <Button x:Name="btn_loadDormData" Content="宿舍" Click="btn_loadDormData_Click" IsEnabled="False" ToolTip="加载选定人形的宿舍骨骼数据" Padding="5" />
                 </hc:ButtonGroup>
                 <Button x:Name="btn_LoadChibiList" hc:IconElement.Geometry="{StaticResource RefreshGeometry}" Content="重载数据列表" Click="btn_LoadChibiList_Click" Margin="2,0,2,0" Grid.Row="1" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" ToolTip="从服务器重新加载数据列表" Padding="5"/>
-                <ToggleButton Content="保存到本地" ToolTip="保存立绘数据到本地" Grid.Row="1" Grid.Column="1" Style="{StaticResource ToggleButtonSwitch}" x:Name="chb_save_cg" IsChecked="True" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" HorizontalAlignment="Center" />
+                <ToggleButton Content="保存到本地" ToolTip="保存立绘数据到本地" Grid.Row="1" Grid.Column="1" Style="{StaticResource ToggleButtonSwitch}" x:Name="chb_save_cg" IsChecked="True" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" />
                 <Label x:Name="lblSelectedItem" Content="未选择" Grid.Column="2" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="{x:Null}" BorderThickness="0" Padding="0" HorizontalContentAlignment="Center" Grid.Row="1" />
                 <Button x:Name="btn_ImportExternalSpine" Style="{DynamicResource ButtonDashedWarning}" Content="导入外部数据(_I)" Margin="2,0,2,0" Grid.Row="1" Grid.Column="3" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" ToolTip="导入外部骨骼数据" Click="btn_ImportExternalSpine_Click" Padding="5"/>
-                <ToggleButton Style="{StaticResource ToggleButtonSwitch}" Grid.Row="1" Grid.Column="4" Content="多开加载" ToolTip="勾选后加载为多开一个新桌宠实例，而不是应用到当前选中的实例" x:Name="chb_force_load" IsChecked="False" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" HorizontalAlignment="Center" />
             </Grid>
         </Grid>
         <Label Content="人形骨骼数据、立绘图片等少女前线游戏素材版权均归散爆、云母组所有。&#xD;&#xA;仅供个人学习研究与交流用，严禁用于商业用途。使用此程序一切风险自负。" Grid.Row="3" Grid.ColumnSpan="2" VerticalContentAlignment="Center" Margin="4" Background="{x:Null}" BorderThickness="0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" VerticalAlignment="Stretch" Height="42"/>

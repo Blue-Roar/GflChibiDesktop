@@ -39,7 +39,7 @@
       <Value Profile="(Default)">False</Value>
     </Setting>
     <Setting Name="DownloadSource" Type="System.String" Scope="User">
-      <Value Profile="(Default)">https://gfl.brightsu.cn/data/resource/</Value>
+      <Value Profile="(Default)">https://gfl-data.brightsu.cn/res/</Value>
     </Setting>
     <Setting Name="DummyPath" Type="System.String" Scope="User">
       <Value Profile="(Default)">hk416agent_546</Value>

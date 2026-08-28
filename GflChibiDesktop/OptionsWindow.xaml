@@ -12,7 +12,7 @@
                 <SolidColorBrush Color="#FF202020" Opacity="0.5"/>
             </Border.Background>
         </Border>
-        <Border x:Name="titleBar" MouseMove="Border_MouseMove" Height="25" VerticalAlignment="Top" Margin="1,1,1,0">
+        <Border x:Name="titleBar" MouseMove="Border_MouseMove" Cursor="SizeAll" Height="25" VerticalAlignment="Top" Margin="1,1,1,0">
             <Grid>
                 <Label Content="战术人形控制台" Background="{x:Null}" VerticalContentAlignment="Center" BorderBrush="{x:Null}" Padding="6,0,0,0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" HorizontalContentAlignment="Left" />
                 <Button x:Name="btnClose" BorderBrush="{x:Null}" Foreground="White" Focusable="False" IsTabStop="False" Style="{StaticResource ButtonDanger}" hc:BorderElement.CornerRadius="0,5,0,0" hc:IconElement.Geometry="{StaticResource RemoveGeometry}" Click="btnClose_Click" BorderThickness="0" Cursor="Arrow" Width="40" HorizontalAlignment="Right" HorizontalContentAlignment="Center" Height="25">
