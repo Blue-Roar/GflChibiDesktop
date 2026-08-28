@@ -306,7 +306,7 @@ namespace GflChibiDesktop
         {
             try
             {
-                string appDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app");
+                string appDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
                 string atlas = data.AtlasFile;
                 string skel = data.SkeletonFile;
                 if (!System.IO.Path.IsPathRooted(atlas)) atlas = System.IO.Path.Combine(appDir, atlas);
@@ -355,14 +355,12 @@ namespace GflChibiDesktop
         {
             try
             {
-                int idx = atlasPath.IndexOf("assets", StringComparison.OrdinalIgnoreCase);
-                if (idx >= 0)
+                // 形如 ...\Resources\spine\path\file.atlas 或 ...\Resources\spine_external\path\file.atlas
+                string[] parts = atlasPath.Split('\\', '/');
+                for (int i = 0; i < parts.Length - 2; i++)
                 {
-                    string rel = atlasPath.Substring(idx);
-                    string[] parts = rel.Split('\\', '/');
-                    // parts: assets, spine|spine_external, path, filename.atlas
-                    if (parts.Length >= 4 && (parts[1] == "spine" || parts[1] == "spine_external"))
-                        return $"{parts[1]}/{parts[2]}";
+                    if ((parts[i] == "spine" || parts[i] == "spine_external") && i + 1 < parts.Length)
+                        return $"{parts[i]}/{parts[i + 1]}";
                 }
             }
             catch
@@ -446,7 +444,7 @@ namespace GflChibiDesktop
             App.globalValues.PreMultiplyAlpha = true;
             App.globalValues.IsLoop = true;
 
-            string spineDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app", "assets", "spine");
+            string spineDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "spine");
             string atlas = $@"{spineDir}\{tagString[6]}\{tagString[7]}.atlas";
             string skel = $@"{spineDir}\{tagString[6]}\{tagString[7]}.skel";
             if (App.globalValues.IsDormMode)
@@ -1199,7 +1197,7 @@ namespace GflChibiDesktop
 
         private void mi_donate_Click(object sender, RoutedEventArgs e)
         {
-            System.Diagnostics.Process.Start(donateLink);
+            HttpRequestHelper.OpenUrl(donateLink);
         }
 
         public bool IsAdministrator()

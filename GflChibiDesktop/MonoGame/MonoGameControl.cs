@@ -55,7 +55,23 @@ namespace GflChibiDesktop
 
         private void StartHost()
         {
-            _host = new MonoGameHost(this);
+            try
+            {
+                StartHostWithProfile(GraphicsProfile.HiDef);
+            }
+            catch (NoSuitableGraphicsDeviceException ex)
+            {
+                _host?.Dispose();
+                _host = null;
+                HandyControl.Controls.Growl.ErrorGlobal(
+                    $"无法创建图形设备（未找到可用的 OpenGL 上下文，或显卡驱动过旧）。\n{ex.Message}");
+                throw;
+            }
+        }
+
+        private void StartHostWithProfile(GraphicsProfile profile)
+        {
+            _host = new MonoGameHost(this, profile);
             _host.RunOneFrame();
 
             GraphicsDevice = _host.GraphicsDevice;
@@ -75,10 +91,25 @@ namespace GflChibiDesktop
 
         private void OnShutdownStarted(object sender, EventArgs e)
         {
-            CompositionTarget.Rendering -= OnRendering;
-            Application.Current.Dispatcher.ShutdownStarted -= OnShutdownStarted;
-            _host?.Dispose();
-            _host = null;
+            try
+            {
+                CompositionTarget.Rendering -= OnRendering;
+                if (Application.Current?.Dispatcher != null)
+                {
+                    Application.Current.Dispatcher.ShutdownStarted -= OnShutdownStarted;
+                }
+                // 进程即将退出，不在此手动销毁 MonoGame 宿主：
+                // 退出时序中销毁 GL 上下文 / SDL 窗口容易触发原生 AccessViolation，
+                // 交由操作系统在进程结束时统一回收即可。
+                if (_host != null)
+                {
+                    GC.SuppressFinalize(_host);
+                    _host = null;
+                }
+            }
+            catch
+            {
+            }
         }
 
         private void OnRendering(object sender, EventArgs e)

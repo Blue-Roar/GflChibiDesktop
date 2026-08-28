@@ -112,19 +112,6 @@ namespace GflChibiDesktop
             MainWindow.SettingsWindowState(false);
         }
 
-        private void pbDevMode_Completed(object sender, RoutedEventArgs e)
-        {
-            if (pbDevMode.Password == "7355608")
-            {
-                pbDevMode.IsEnabled = false;
-                chbAdvancedSimulation.IsEnabled = true;
-            }
-            else
-            {
-                pbDevMode.Password = "";
-            }
-        }
-
         private void btn_ResetDummy_Click(object sender, RoutedEventArgs e)
         {
             _window.ResetDummy();

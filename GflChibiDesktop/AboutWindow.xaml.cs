@@ -172,11 +172,11 @@ namespace GflChibiDesktop
         {
             if (btn_Actions.Content.ToString() == "前往主页")
             {
-                System.Diagnostics.Process.Start(homepageLink);
+                HttpRequestHelper.OpenUrl(homepageLink);
             }
             else if (btn_Actions.Content.ToString() == "前往更新")
             {
-                System.Diagnostics.Process.Start(updateLink);
+                HttpRequestHelper.OpenUrl(updateLink);
             }
         }
 

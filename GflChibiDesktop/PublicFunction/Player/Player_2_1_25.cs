@@ -78,11 +78,25 @@ public class Player_2_1_25 : IPlayer
         }
         else
         {
-            state.SetAnimation(0, state.Data.skeletonData.animations[0].name, App.globalValues.IsLoop);
+            // 默认选择 wait 动画；模型没有 wait 则用第一个动画
+            string defaultAnime = state.Data.skeletonData.animations[0].name;
+            foreach (Animation a in state.Data.skeletonData.animations)
+            {
+                if (a.name == "wait")
+                {
+                    defaultAnime = "wait";
+                    break;
+                }
+            }
+            App.globalValues.SelectAnimeName = defaultAnime;
+            state.SetAnimation(0, defaultAnime, App.globalValues.IsLoop);
         }
 
         if (App.isNew)
         {
+            // 新加载模型时居中
+            App.globalValues.PosX = (float)(App.canvasWidth / 2);
+            App.globalValues.PosY = (float)(App.canvasHeight / 2);
             MainWindow.SetCBAnimeName();
         }
         App.isNew = false;

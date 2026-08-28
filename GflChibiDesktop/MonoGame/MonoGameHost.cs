@@ -28,12 +28,12 @@ namespace GflChibiDesktop
         /// <summary>BGRA 预乘像素缓冲（与 Pbgra32 对应），每帧由 Draw 填充。</summary>
         public byte[] PixelBuffer => _pixelBuffer;
 
-        public MonoGameHost(MonoGameControl control)
+        public MonoGameHost(MonoGameControl control, GraphicsProfile profile)
         {
             _control = control;
             _graphics = new GraphicsDeviceManager(this)
             {
-                GraphicsProfile = GraphicsProfile.HiDef,
+                GraphicsProfile = profile,
                 SynchronizeWithVerticalRetrace = false
             };
             IsFixedTimeStep = false;

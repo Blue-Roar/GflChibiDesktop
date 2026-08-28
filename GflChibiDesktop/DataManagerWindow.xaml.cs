@@ -34,7 +34,7 @@ namespace GflChibiDesktop.Windows
 
     public partial class DataManagerWindow : HandyControl.Controls.Window
     {
-        public static string AppDir => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app") + Path.DirectorySeparatorChar;
+        public static string AppDir => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources") + Path.DirectorySeparatorChar;
         public readonly string productTitle = ((AssemblyTitleAttribute)Attribute.GetCustomAttribute(Assembly.GetExecutingAssembly(), typeof(AssemblyTitleAttribute))).Title.ToString();
         public readonly Version productVersion = new Version(((AssemblyFileVersionAttribute)Attribute.GetCustomAttribute(Assembly.GetExecutingAssembly(), typeof(AssemblyFileVersionAttribute))).Version) ?? Assembly.GetExecutingAssembly().GetName().Version;
         public MainWindow OwnerMainWindow { get; set; }
@@ -329,11 +329,11 @@ namespace GflChibiDesktop.Windows
             {
                 return false;
             }
-            if (Directory.Exists($@"{AppDir}assets/spine/{path}"))
+            if (Directory.Exists($@"{AppDir}spine/{path}"))
             {
                 return true;
             }
-            if (Directory.Exists($@"{AppDir}assets/spine_external/{path}"))
+            if (Directory.Exists($@"{AppDir}spine_external/{path}"))
             {
                 return true;
             }
@@ -352,7 +352,7 @@ namespace GflChibiDesktop.Windows
         public void LoadChibiList()
         {
             chibiListLoaded = false;
-            KillEmptyDirectory($@"{AppDir}assets/spine");
+            KillEmptyDirectory($@"{AppDir}spine");
             Dispatcher.Invoke(() => sbQuery.Clear());
 
             initializeDataSet.Clear();
@@ -675,7 +675,7 @@ namespace GflChibiDesktop.Windows
                 lbl_InternalSelected.Foreground = item.Foreground;
                 if (!item.ComponentName.Contains("class"))
                 {
-                    KillEmptyDirectory($@"{AppDir}assets/spine");
+                    KillEmptyDirectory($@"{AppDir}spine");
 
                     string[] tagString = new string[12];
                     tagString[0] = item.Tag[0];//displaySwitch
@@ -697,8 +697,8 @@ namespace GflChibiDesktop.Windows
                     if (tagString[8] != null)
                     {
                         // 已有本地立绘时可离线加载查看；否则需联网在线加载
-                        bool hasLocalCG = (!string.IsNullOrEmpty(tagString[8]) && File.Exists($@"{AppDir}assets/pic/{tagString[8]}"))
-                                       || (!string.IsNullOrEmpty(tagString[9]) && File.Exists($@"{AppDir}assets/pic/{tagString[9]}"));
+                        bool hasLocalCG = (!string.IsNullOrEmpty(tagString[8]) && File.Exists($@"{AppDir}pic/{tagString[8]}"))
+                                       || (!string.IsNullOrEmpty(tagString[9]) && File.Exists($@"{AppDir}pic/{tagString[9]}"));
                         btn_loadCG.IsEnabled = isOnline || hasLocalCG;
                         // 立绘正在被显示时禁用删除按钮
                         btn_deleteCG.IsEnabled = hasLocalCG && !IsCgInUse(tagString[8], tagString[9]);
@@ -711,7 +711,7 @@ namespace GflChibiDesktop.Windows
                                 cg_filename = tagString[9];
                             }
                         }
-                        string cgURL = $@"{AppDir}assets/pic/{cg_filename}";
+                        string cgURL = $@"{AppDir}pic/{cg_filename}";
                         try
                         {
                             if (File.Exists(cgURL))
@@ -754,12 +754,12 @@ namespace GflChibiDesktop.Windows
                             btn_deleteData.Visibility = Visibility.Visible;
                         }
 
-                        if (Directory.Exists($@"{AppDir}assets/{spineRoot}/{tagString[6]}"))
+                        if (Directory.Exists($@"{AppDir}{spineRoot}/{tagString[6]}"))
                         {
                             bool checkResult = true;
                             foreach (string filename in tagString[11].Split('|'))
                             {
-                                if (!File.Exists($@"{AppDir}assets/{spineRoot}/{tagString[6]}/{filename}"))
+                                if (!File.Exists($@"{AppDir}{spineRoot}/{tagString[6]}/{filename}"))
                                 {
                                     checkResult = false;
                                 }
@@ -916,12 +916,12 @@ namespace GflChibiDesktop.Windows
             if (tagString[8] != null)
             {
                 cg = true;
-                local_cg = File.Exists($@"{AppDir}assets/pic/{tagString[8]}");
+                local_cg = File.Exists($@"{AppDir}pic/{tagString[8]}");
             }
             if (tagString[9] != null)
             {
                 cg_d = true;
-                local_cg_d = File.Exists($@"{AppDir}assets/pic/{tagString[9]}");
+                local_cg_d = File.Exists($@"{AppDir}pic/{tagString[9]}");
             }
 
             if (cg) //存在立绘
@@ -930,7 +930,7 @@ namespace GflChibiDesktop.Windows
                 {
                     if (local_cg && local_cg_d) //本地同时存在两种立绘，直接加载
                     {
-                        new CGWindow().LoadCG(tagString[5], $@"{AppDir}assets/pic/", tagString[8], tagString[9]);
+                        new CGWindow().LoadCG(tagString[5], $@"{AppDir}pic/", tagString[8], tagString[9]);
                     }
                     else
                     {
@@ -948,7 +948,7 @@ namespace GflChibiDesktop.Windows
                 {
                     if (local_cg) //本地存在，直接加载
                     {
-                        new CGWindow().LoadCG(tagString[5], $@"{AppDir}assets/pic/", tagString[8]);
+                        new CGWindow().LoadCG(tagString[5], $@"{AppDir}pic/", tagString[8]);
                     }
                     else
                     {
@@ -983,9 +983,9 @@ namespace GflChibiDesktop.Windows
 
                 string cg_url = Settings.Default.DownloadSource + "pic/";
 
-                if (!Directory.Exists($@"{AppDir}assets/pic"))
+                if (!Directory.Exists($@"{AppDir}pic"))
                 {
-                    Directory.CreateDirectory($@"{AppDir}assets/pic");
+                    Directory.CreateDirectory($@"{AppDir}pic");
                 }
                 sp_downloader.Visibility = Visibility.Visible;
                 pb_loader.IsIndeterminate = false;
@@ -995,7 +995,7 @@ namespace GflChibiDesktop.Windows
                 {
                     txt_loader.Text = $"正在下载 {tagString[5]} 的大破立绘数据";
                     pb_loader.Maximum = 2;
-                    await HttpClass.DownloadFileAsync($"{cg_url}/{tagString[9]}", $@"{AppDir}assets/pic/{tagString[9]}", (current, total) =>
+                    await HttpClass.DownloadFileAsync($"{cg_url}/{tagString[9]}", $@"{AppDir}pic/{tagString[9]}", (current, total) =>
                     {
                         pb_downloader.Maximum = (int)total;
                         pb_downloader.Value = (int)current;
@@ -1004,7 +1004,7 @@ namespace GflChibiDesktop.Windows
                     pb_loader.Value++;
                 }
                 txt_loader.Text = $"正在下载 {tagString[5]} 的立绘数据";
-                await HttpClass.DownloadFileAsync($"{cg_url}/{tagString[8]}", $@"{AppDir}assets/pic/{tagString[8]}", (current, total) =>
+                await HttpClass.DownloadFileAsync($"{cg_url}/{tagString[8]}", $@"{AppDir}pic/{tagString[8]}", (current, total) =>
                 {
                     pb_downloader.Maximum = (int)total;
                     pb_downloader.Value = (int)current;
@@ -1017,11 +1017,11 @@ namespace GflChibiDesktop.Windows
 
                 if (tagString[9] != null)
                 {
-                    new CGWindow().LoadCG(tagString[5], $@"{AppDir}assets/pic/", tagString[8], tagString[9]);
+                    new CGWindow().LoadCG(tagString[5], $@"{AppDir}pic/", tagString[8], tagString[9]);
                 }
                 else
                 {
-                    new CGWindow().LoadCG(tagString[5], $@"{AppDir}assets/pic/", tagString[8]);
+                    new CGWindow().LoadCG(tagString[5], $@"{AppDir}pic/", tagString[8]);
                 }
 
                 tv_InternalSelector.IsEnabled = true;
@@ -1076,17 +1076,17 @@ namespace GflChibiDesktop.Windows
             bool isExternal = tagString[0] == "External";
             string spineRoot = isExternal ? "spine_external" : "spine";
 
-            string AtlasFile = $@"assets/{spineRoot}/{tagString[6]}/{tagString[7]}.atlas";
-            string SpineFile = $@"assets/{spineRoot}/{tagString[6]}/{tagString[7]}.skel";
+            string AtlasFile = $@"{spineRoot}/{tagString[6]}/{tagString[7]}.atlas";
+            string SpineFile = $@"{spineRoot}/{tagString[6]}/{tagString[7]}.skel";
             string DisplayName = tagString[5];
             if (dormMode)
             {
                 if (tagString[10] != null)
                 {
-                    if (File.Exists($@"{AppDir}assets/{spineRoot}/{tagString[6]}/{tagString[10]}.atlas"))
-                    { AtlasFile = $@"assets/{spineRoot}/{tagString[6]}/{tagString[10]}.atlas"; }
-                    if (File.Exists($@"{AppDir}assets/{spineRoot}/{tagString[6]}/{tagString[10]}.skel"))
-                    { SpineFile = $@"assets/{spineRoot}/{tagString[6]}/{tagString[10]}.skel"; }
+                    if (File.Exists($@"{AppDir}{spineRoot}/{tagString[6]}/{tagString[10]}.atlas"))
+                    { AtlasFile = $@"{spineRoot}/{tagString[6]}/{tagString[10]}.atlas"; }
+                    if (File.Exists($@"{AppDir}{spineRoot}/{tagString[6]}/{tagString[10]}.skel"))
+                    { SpineFile = $@"{spineRoot}/{tagString[6]}/{tagString[10]}.skel"; }
                     DisplayName = $"{tagString[5]} [宿舍]";
                 }
             }
@@ -1095,7 +1095,7 @@ namespace GflChibiDesktop.Windows
             {
                 foreach (string fname in tagString[11].Split('|', StringSplitOptions.RemoveEmptyEntries))
                 {
-                    string fpath = $@"{AppDir}assets/{spineRoot}/{tagString[6]}/{fname}";
+                    string fpath = $@"{AppDir}{spineRoot}/{tagString[6]}/{fname}";
                     if (!File.Exists(fpath))
                     {
                         if (!Properties.Settings.Default.SuppressLoadPrompts) GrowlHelper.ErrorGlobal($"加载失败：骨骼数据文件不存在。\n{fpath}");
@@ -1154,20 +1154,20 @@ namespace GflChibiDesktop.Windows
                         pb_loader.IsIndeterminate = false;
                         txt_loader.Text = $"正在下载 {tagString[5]}";
 
-                        KillEmptyDirectory($@"{AppDir}assets/spine");
+                        KillEmptyDirectory($@"{AppDir}spine");
 
                         foreach (string filename in tagString[11].Split('|'))
                         {
                             txt_loader.Text = $"正在下载 {tagString[5]}：{filename} ({pb_loader.Value}/{total_files})";
 
-                            if (!Directory.Exists($@"{AppDir}assets/spine/{tagString[6]}"))
+                            if (!Directory.Exists($@"{AppDir}spine/{tagString[6]}"))
                             {
-                                Directory.CreateDirectory($@"{AppDir}assets/spine/{tagString[6]}");
+                                Directory.CreateDirectory($@"{AppDir}spine/{tagString[6]}");
                             }
 
                             await HttpClass.DownloadFileAsync(
                                 $"{downloadSource}/{filename}",
-                                $@"{AppDir}assets/spine/{tagString[6]}/{filename}",
+                                $@"{AppDir}spine/{tagString[6]}/{filename}",
                                 (current, total) =>
                                 {
                                     pb_downloader.Maximum = (int)total;
@@ -1219,7 +1219,7 @@ namespace GflChibiDesktop.Windows
                 {
                     continue;
                 }
-                string p = $@"{AppDir}assets/pic/{f}";
+                string p = $@"{AppDir}pic/{f}";
                 if (File.Exists(p))
                 {
                     files.Add(p);
@@ -1247,7 +1247,7 @@ namespace GflChibiDesktop.Windows
                 {
                     File.Delete(p);
                 }
-                KillEmptyDirectory($@"{AppDir}assets/pic");
+                KillEmptyDirectory($@"{AppDir}pic");
                 img_Preview.Source = null;
                 tvAfterSelect();
                 GrowlHelper.SuccessGlobal($"已删除“{tagString[5]}”的立绘数据。");
@@ -1310,13 +1310,13 @@ namespace GflChibiDesktop.Windows
         {
             try
             {
-                if (Directory.Exists($@"{AppDir}assets/spine/{dummy}"))
+                if (Directory.Exists($@"{AppDir}spine/{dummy}"))
                 {
-                    Directory.Delete($@"{AppDir}assets/spine/{dummy}", true);
+                    Directory.Delete($@"{AppDir}spine/{dummy}", true);
                 }
-                else if (Directory.Exists($@"{AppDir}assets/spine_external/{dummy}"))
+                else if (Directory.Exists($@"{AppDir}spine_external/{dummy}"))
                 {
-                    Directory.Delete($@"{AppDir}assets/spine_external/{dummy}", true);
+                    Directory.Delete($@"{AppDir}spine_external/{dummy}", true);
                     // 同步从外部数据表移除该条目并写盘
                     ExternalRoot er = ReadExternalSpineList();
                     if (er.content != null)
@@ -1445,7 +1445,7 @@ namespace GflChibiDesktop.Windows
                 bool hasR = fileMap.Keys.Any(n => string.Equals(System.IO.Path.GetFileNameWithoutExtension(n), "r" + baseName, StringComparison.OrdinalIgnoreCase));
                 string filenameR = hasR ? "r" + baseName : null;
 
-                string dirPath = $@"{AppDir}assets/spine_external/{baseName}";
+                string dirPath = $@"{AppDir}spine_external/{baseName}";
                 Directory.CreateDirectory(dirPath);
                 foreach (string f in files)
                 {

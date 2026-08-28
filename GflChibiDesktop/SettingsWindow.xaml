@@ -7,21 +7,12 @@
         mc:Ignorable="d"
         ActiveGlowColor="{DynamicResource PrimaryColor}"
         WindowStartupLocation="CenterScreen"
-        Title="首选项" Width="416" Height="416" SnapsToDevicePixels="True" ResizeMode="NoResize" Icon="hk416_happy.ico" Background="#FF1B1B1C" Foreground="White" Closed="Window_Closed" ShowIcon="False" ShowInTaskbar="False" hc:WindowAttach.IgnoreAltF4="True" hc:WindowAttach.ShowInTaskManager="False">
-    <Canvas>
-        <GroupBox Header="Q宠设置" Height="170" Width="396" Style="{StaticResource GroupBoxTab}" Canvas.Left="10" Canvas.Top="10">
+        Title="首选项" Width="416" Height="216" SnapsToDevicePixels="True" ResizeMode="NoResize" Icon="hk416_happy.ico" Background="#FF1B1B1C" Foreground="White" Closed="Window_Closed" ShowIcon="False" ShowInTaskbar="False" hc:WindowAttach.IgnoreAltF4="True" hc:WindowAttach.ShowInTaskManager="False">
+    <Grid>
+        <GroupBox Header="Q宠设置" Style="{StaticResource GroupBoxTab}" Canvas.Left="10" Canvas.Top="10" VerticalAlignment="Top" Margin="10,10,10,10" Height="120">
             <Canvas>
                 <CheckBox x:Name="chbSimulation" Content="启用动态模拟 (行动仿真)" Canvas.Left="10" Canvas.Top="10" Width="160" Click="chbSimulation_Click" />
-                <CheckBox x:Name="chbAdvancedSimulation" Content="启用动态模拟 (进阶交互)" Canvas.Left="10" Canvas.Top="31" Width="160" IsEnabled="False" />
-                <GroupBox Header="进阶模拟" HorizontalAlignment="Left" Height="68" VerticalAlignment="Top" Width="160" Style="{StaticResource GroupBoxTab}" hc:TitleElement.TitlePlacement="Left" Canvas.Left="10" Canvas.Top="52" IsEnabled="{Binding IsChecked, ElementName=chbAdvancedSimulation}">
-                    <Canvas>
-                        <CheckBox Content="" Width="120" />
-                        <CheckBox Content="" Canvas.Top="21" Width="120" />
-                        <CheckBox Content="" Canvas.Top="42" Width="120" />
-                    </Canvas>
-                </GroupBox>
-                <CheckBox x:Name="chbOfflineMode" Content="禁止互联网连接" Canvas.Top="85" Canvas.Left="266" Width="110" IsEnabled="False" />
-                <CheckBox x:Name="chbStartupLaunch" Content="随系统开机启动" Canvas.Top="104" Checked="chbStartupLaunch_Checked" Unchecked="chbStartupLaunch_Unchecked" Canvas.Left="266" Width="110" />
+                <CheckBox x:Name="chbStartupLaunch" Content="随系统开机启动" Canvas.Top="36" Checked="chbStartupLaunch_Checked" Unchecked="chbStartupLaunch_Unchecked" Canvas.Left="10" Width="110" VerticalAlignment="Top" />
                 <!--IsEnabled="{Binding IsChecked, ElementName=chbStartupLaunch}"-->
                 <Button x:Name="btn_CanvasBackground" Content="画布底色设置" Style="{StaticResource ButtonDashedPrimary.Small}" hc:IconElement.Geometry="{StaticResource DropperGeometry}" Click="btn_CanvasBackground_Click" Canvas.Left="266" Canvas.Top="8" Width="110" Height="20" />
                 <Label Content="已弃用" Canvas.Left="267" Canvas.Top="9" Width="29" Background="{x:Null}" BorderBrush="{x:Null}" Padding="0" Height="18" IsHitTestVisible="False" Opacity="0.75" FontSize="8"/>
@@ -38,8 +29,6 @@
                 <CheckBox Content="烫烫烫烫烫" Canvas.Left="290" Canvas.Top="31" Width="86" />
             </Canvas>
         </GroupBox>
-        <Label Content="开发模式解锁 PIN:" Canvas.Left="10" Canvas.Top="308" Width="106" Background="{x:Null}" BorderBrush="{x:Null}" Padding="0" Height="34" HorizontalContentAlignment="Left" IsEnabled="{Binding IsEnabled, ElementName=pbDevMode}"/>
-        <hc:PinBox x:Name="pbDevMode" Canvas.Left="121" Canvas.Top="308" Length="7" Completed="pbDevMode_Completed" Width="285" Height="34" />
-        <Label Content="对此页面上首选项的修改将立即生效" Background="{DynamicResource PrimaryBrush}" Canvas.Left="10" Canvas.Top="347" Width="396" Height="30"/>
-    </Canvas>
+        <Label Content="对此页面上首选项的修改将立即生效" Background="{DynamicResource PrimaryBrush}" Canvas.Left="10" Canvas.Top="161" VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Margin="10,10,10,10"/>
+    </Grid>
 </hc:GlowWindow>
