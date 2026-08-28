@@ -1,0 +1,53 @@
+﻿<Window x:Name="window" x:Class="GflChibiDesktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:GflChibiDesktop"
+        xmlns:iconPacks="http://metro.mahapps.com/winfx/xaml/iconpacks"
+        xmlns:hc="https://handyorg.github.io/handycontrol"
+        mc:Ignorable="d"
+        Title="GflChibiDesktop" FocusVisualStyle="{x:Null}" Closing="Window_Closing" SizeChanged="Window_SizeChanged" Closed="Window_Closed" WindowStartupLocation="CenterScreen" Icon="hk416_happy.ico" ResizeMode="NoResize" WindowStyle="None" Background="{x:Null}" Foreground="{x:Null}" AllowsTransparency="True" ShowInTaskbar="False" Visibility="Visible" IsHitTestVisibleChanged="Window_IsHitTestVisibleChanged" ScrollViewer.VerticalScrollBarVisibility="Disabled" SnapsToDevicePixels="True" MouseDoubleClick="Window_MouseDoubleClick" Topmost="True" GotFocus="Window_GotFocus" Width="{Binding Width, ElementName=MasterGrid, Mode=OneWay}" Height="{Binding Height, ElementName=MasterGrid, Mode=OneWay}" Loaded="Window_Loaded" hc:WindowAttach.IgnoreAltF4="True" hc:WindowAttach.ShowInTaskManager="False" >
+    
+    <DockPanel Name="MasterGrid" Width="{Binding Width, ElementName=GridPlayer, Mode=OneWay}" Height="{Binding Height, ElementName=GridPlayer, Mode=OneWay}">
+        <hc:NotifyIcon x:Name="NotifyIcon" Text="{Binding Title, ElementName=window}" Visibility="Visible" Icon="hk416_happy.ico" MouseDoubleClick="NotifyIcon_MouseDoubleClick">
+            <hc:NotifyIcon.ContextMenu>
+                <ContextMenu>
+                    <!--<MenuItem Command="hc:ControlCommands.PushMainWindow2Top" Header="显示人形" />-->
+                    <MenuItem x:Name="mi_loadDummy" Header="加载战术人形数据" Click="menuItem_LoadDummy_Click" />
+                    <MenuItem x:Name="mi_dummyOptions" Header="战术人形控制台" Click="menuItem_Options_Click"/>
+                    <Separator/>
+                    <MenuItem x:Name="mi_disableInteraction" Header="禁用交互(点击穿透)" IsCheckable="True" Unchecked="mi_disableInteraction_Unchecked" Checked="mi_disableInteraction_Checked"/>
+                    <MenuItem x:Name="mi_hideDummy" Header="隐藏战术人形" IsCheckable="True" Checked="mi_hideDummy_Checked" Unchecked="mi_hideDummy_Unchecked" />
+                    <!--<MenuItem x:Name="mi_resetDummy" Header="重置战术人形" Click="mi_resetDummy_Click"/>-->
+                    <Separator/>
+                    <MenuItem x:Name="mi_settings" Header="首选项" Click="mi_settings_Click" />
+                    <MenuItem x:Name="mi_about" Header="关于程序与检查更新" Click="mi_about_Click" />
+                    <!--<MenuItem x:Name="mi_donate" Header="打赏程序作者" Click="mi_donate_Click" />-->
+                    <!--<MenuItem x:Name="mi_startupLaunch" Header="开机自启动" IsCheckable="True" Checked="mi_startupLaunch_Checked" Unchecked="mi_startupLaunch_Unchecked" IsEnabled="False" />-->
+                    <MenuItem x:Name="mi_saveSettings" Header="保存状态" Click="mi_saveSettings_Click" />
+                    <Separator/>
+                    <MenuItem Command="hc:ControlCommands.ShutdownApp" Header="退出" Click="mi_Exit_Click" />
+                </ContextMenu>
+            </hc:NotifyIcon.ContextMenu>
+            <hc:Interaction.Triggers>
+                <hc:EventTrigger EventName="MouseDoubleClick">
+                    <hc:EventToCommand Command="hc:ControlCommands.PushMainWindow2Top"/>
+                </hc:EventTrigger>
+            </hc:Interaction.Triggers>
+        </hc:NotifyIcon>
+        <Grid Name="MainContent" Width="{Binding Width, ElementName=GridPlayer, Mode=OneWay}" Height="{Binding Height, ElementName=GridPlayer, Mode=OneWay}">
+            <Grid.ContextMenu>
+                <ContextMenu>
+                    <MenuItem x:Name="menuItem_LoadDummy" Header="加载" Click="menuItem_LoadDummy_Click" Width="100"/>
+                    <MenuItem x:Name="menuItem_Options" Header="选项" Click="menuItem_Options_Click" Width="100"/>
+                    <Separator/>
+                    <MenuItem x:Name="menuItem_Quit" Header="退出" Width="100" Click="mi_Exit_Click"/>
+                </ContextMenu>
+            </Grid.ContextMenu>
+            <Grid Name="GridPlayer" MouseMove="Move_MouseMove" Cursor="SizeAll" Width="{Binding Width, ElementName=Player, Mode=OneWay}" Height="{Binding Height, ElementName=Player, Mode=OneWay}" >
+                <ContentControl Name="Player" FocusVisualStyle="{x:Null}" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Width="448" Height="448" HorizontalAlignment="Left" VerticalAlignment="Top" UseLayoutRounding="True" RenderOptions.BitmapScalingMode="HighQuality" />
+            </Grid>
+        </Grid>
+    </DockPanel>
+</Window>

@@ -1,0 +1,54 @@
+﻿<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="GflChibiDesktop.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="DummyPos" Type="System.Drawing.Point" Scope="User">
+      <Value Profile="(Default)">224, 224</Value>
+    </Setting>
+    <Setting Name="LastSelectDir" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="DummyName" Type="System.String" Scope="User">
+      <Value Profile="(Default)">hk416agent_546</Value>
+    </Setting>
+    <Setting Name="DummyAnime" Type="System.String" Scope="User">
+      <Value Profile="(Default)">wait</Value>
+    </Setting>
+    <Setting Name="DummyDisplayName" Type="System.String" Scope="User">
+      <Value Profile="(Default)">特工416 曼岛之盾</Value>
+    </Setting>
+    <Setting Name="Topmost" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="DummyOpacity" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">1</Value>
+    </Setting>
+    <Setting Name="Pos" Type="System.Drawing.Point" Scope="User">
+      <Value Profile="(Default)">0, 0</Value>
+    </Setting>
+    <Setting Name="CanvasSize" Type="System.Drawing.Size" Scope="User">
+      <Value Profile="(Default)">448, 448</Value>
+    </Setting>
+    <Setting Name="DummyScale" Type="System.Single" Scope="User">
+      <Value Profile="(Default)">1</Value>
+    </Setting>
+    <Setting Name="DummyDormMode" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="DummySimulation" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="DownloadSource" Type="System.String" Scope="User">
+      <Value Profile="(Default)">https://gfl.brightsu.cn/data/resource/</Value>
+    </Setting>
+    <Setting Name="DummyPath" Type="System.String" Scope="User">
+      <Value Profile="(Default)">hk416agent_546</Value>
+    </Setting>
+    <Setting Name="DummyFilename" Type="System.String" Scope="User">
+      <Value Profile="(Default)">hk416agent_546</Value>
+    </Setting>
+    <Setting Name="DummyFilenameR" Type="System.String" Scope="User">
+      <Value Profile="(Default)">rhk416agent_546</Value>
+    </Setting>
+  </Settings>
+</SettingsFile>

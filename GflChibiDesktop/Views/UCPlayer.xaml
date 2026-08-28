@@ -1,0 +1,25 @@
+﻿<UserControl x:Class="GflChibiDesktop.Views.UCPlayer"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:GflChibiDesktop.Views"
+             mc:Ignorable="d" 
+     d:DesignHeight="448" d:DesignWidth="448" FocusVisualStyle="{x:Null}" SizeChanged="UserControl_SizeChanged" >
+    <Grid Name="Panel" >
+        <ScrollViewer FocusVisualStyle="{x:Null}" PreviewMouseWheel="ScrollViewer_MouseWheel" Foreground="{x:Null}" >
+            <Canvas Name="Frame" Background="{x:Null}" FocusVisualStyle="{x:Null}" MouseDown="Frame_MouseDown" MouseMove="Frame_MouseMove"  MouseUp="Frame_MouseUp"  MouseLeave="Frame_MouseLeave"  >
+                <Canvas.RenderTransform>
+                    <TransformGroup>
+                        <TranslateTransform />
+                    </TransformGroup>
+                </Canvas.RenderTransform>
+                <Canvas.LayoutTransform>
+                    <TransformGroup>
+                        <ScaleTransform  />
+                    </TransformGroup>
+                </Canvas.LayoutTransform>
+            </Canvas>
+        </ScrollViewer>
+    </Grid>
+</UserControl>
