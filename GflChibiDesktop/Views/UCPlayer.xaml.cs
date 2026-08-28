@@ -29,42 +29,7 @@ namespace GflChibiDesktop.Views
             if (App.appXC == null)
                 App.appXC = new MonoGameControl();
 
-            switch (App.globalValues.SelectSpineVersion)
-            {
-                case "2.1.08":
-                    player = new Player_2_1_08();
-                    break;
-                case "2.1.25":
-                    player = new Player_2_1_25();
-                    break;
-                case "3.1.07":
-                    player = new Player_3_1_07();
-                    break;
-                case "3.2.xx":
-                    player = new Player_3_2_xx();
-                    break;
-                case "3.4.02":
-                    player = new Player_3_4_02();
-                    break;
-                case "3.5.51":
-                    player = new Player_3_5_51();
-                    break;
-                case "3.6.32":
-                    player = new Player_3_6_32();
-                    break;
-                case "3.6.39":
-                    player = new Player_3_6_39();
-                    break;
-                case "3.6.53":
-                    player = new Player_3_6_53();
-                    break;
-                case "3.7.94":
-                    player = new Player_3_7_94();
-                    break;
-                case "3.8.95":
-                    player = new Player_3_8_95();
-                    break;
-            }
+            player = new Player_2_1_25();
 
             App.appXC.Initialize += player.Initialize;
             App.appXC.Update += player.Update;

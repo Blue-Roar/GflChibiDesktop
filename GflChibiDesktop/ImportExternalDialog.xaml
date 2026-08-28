@@ -1,0 +1,32 @@
+<UserControl x:Class="GflChibiDesktop.Windows.ImportExternalDialog"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:hc="https://handyorg.github.io/handycontrol"
+             mc:Ignorable="d" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+             Width="400" Height="210" Background="{DynamicResource SecondaryRegionBrush}" Foreground="{DynamicResource PrimaryTextBrush}">
+    <hc:SimplePanel>
+        <Border Background="{DynamicResource PrimaryBrush}" Height="30" VerticalAlignment="Top">
+            <hc:SimplePanel>
+                <hc:SimpleText FontSize="{StaticResource SubHeadFontSize}" VerticalAlignment="Center" TextWrapping="Wrap" HorizontalAlignment="Stretch" TextAlignment="Center" Text="导入外部骨骼数据" Foreground="{StaticResource PrimaryTextBrush}" Margin="30,0,30,0"/>
+                <Image RenderTransformOrigin="0,0" UseLayoutRounding="True" RenderOptions.BitmapScalingMode="HighQuality" Height="24" Width="24" HorizontalAlignment="Left" Source="/hk416_angry.ico" VerticalAlignment="Top" Margin="3"/>
+                <Button Width="24" Height="24" Style="{StaticResource ButtonIcon}" hc:IconElement.Geometry="{StaticResource ErrorGeometry}" Padding="0" HorizontalAlignment="Right" VerticalAlignment="Top" Command="hc:ControlCommands.Close" Margin="3" />
+            </hc:SimplePanel>
+        </Border>
+        <Grid Margin="0,30,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="4*"/>
+                <RowDefinition Height="3*"/>
+            </Grid.RowDefinitions>
+            <Label Content="皮肤名称：" HorizontalAlignment="Left" VerticalAlignment="Top" Width="70" Margin="10,10,0,0" Padding="0" Background="{x:Null}" BorderThickness="0"/>
+            <hc:TextBox x:Name="tb_skinName" VerticalAlignment="Top" Margin="80,10,10,0" Height="28" MaxLines="1"/>
+            <Label Content="数据文件：" HorizontalAlignment="Left" VerticalAlignment="Top" Width="70" Margin="10,43,0,0" Padding="0" Background="{x:Null}" BorderThickness="0"/>
+            <hc:TextBox x:Name="tb_files" VerticalAlignment="Top" Margin="80,43,115,0" IsReadOnly="True" Text="未选择文件" MouseDoubleClick="btn_browse_Click" />
+            <Button x:Name="btn_browse" Content="选择文件(_B)..." HorizontalAlignment="Right" VerticalAlignment="Top" Width="100" Height="28" Margin="0,43,10,0" Click="btn_browse_Click"/>
+            <TextBlock VerticalAlignment="Bottom" Margin="10,0,10,50" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap" Grid.RowSpan="2"><Run Text="外部骨骼数据导入说明：" FontWeight="Bold"/><LineBreak/><Run Text="选择 3-6 个文件" FontWeight="Bold"/><Run Text="（基础 .atlas/.skel/.png 及可选的以 r 开头的宿舍模式数据文件），程序将复制到外部数据目录下。"/></TextBlock>
+            <Button x:Name="btn_OK" Style="{DynamicResource ButtonPrimary}" hc:IconElement.Geometry="{StaticResource AddGeometry}" Content="导入" HorizontalAlignment="Right" Width="100" Height="30" Margin="0,0,120,10" Click="btn_ok_Click" VerticalAlignment="Bottom" Grid.Row="1"/>
+            <Button x:Name="btn_Cancel" Content="取消" HorizontalAlignment="Right" Width="100" Height="30" Margin="0,0,10,10" Command="hc:ControlCommands.Close" VerticalAlignment="Bottom" Grid.Row="1"/>
+        </Grid>
+    </hc:SimplePanel>
+</UserControl>

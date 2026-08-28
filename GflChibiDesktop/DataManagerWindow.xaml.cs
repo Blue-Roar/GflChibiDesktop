@@ -1,0 +1,1623 @@
+#nullable disable
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using Newtonsoft.Json;
+using GflChibiDesktop.Properties;
+using static GflChibiDesktop.ChibiListReader;
+using static GflChibiDesktop.WebAPI;
+using static GflChibiDesktop.WebVerification;
+using MessageBox = HandyControl.Controls.MessageBox;
+
+namespace GflChibiDesktop.Windows
+{
+    /// <summary>
+    /// 数据加载结果，直接传递给主窗口。
+    /// </summary>
+    public class ChibiModelData
+    {
+        public string DisplayName { get; set; }
+        public string SkeletonFile { get; set; }
+        public string AtlasFile { get; set; }
+        /// <summary>
+        /// 是否为多开（V1 仅单实例，忽略此字段）。
+        /// </summary>
+        public bool NewInstance { get; set; }
+    }
+
+    public partial class DataManagerWindow : HandyControl.Controls.Window
+    {
+        public static string AppDir => Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app") + Path.DirectorySeparatorChar;
+        public readonly string productTitle = ((AssemblyTitleAttribute)Attribute.GetCustomAttribute(Assembly.GetExecutingAssembly(), typeof(AssemblyTitleAttribute))).Title.ToString();
+        public readonly Version productVersion = new Version(((AssemblyFileVersionAttribute)Attribute.GetCustomAttribute(Assembly.GetExecutingAssembly(), typeof(AssemblyFileVersionAttribute))).Version) ?? Assembly.GetExecutingAssembly().GetName().Version;
+        public MainWindow OwnerMainWindow { get; set; }
+        public string homepageLink { get; set; }
+        public string repoLink { get; set; }
+        public string updateLink { get; set; }
+        public string chibiListLink { get; set; }
+        public string announcementMsg { get; set; }
+
+        /// <summary>
+        /// 数据加载完成后触发，把加载结果直接传递给主窗口。
+        /// </summary>
+        public event Action<ChibiModelData> ModelLoadRequested;
+
+        /// <summary>
+        /// 当前已加载（正被桌宠使用）的模型数据目录集合（相对 assets/spine/ 的 path）。
+        /// 由主窗口在打开时提供，用于禁止删除正在使用的数据。
+        /// </summary>
+        public HashSet<string> LoadedPaths { get; set; } = new HashSet<string>();
+
+        /// <summary>
+        /// 是否已联网：未联网时禁用联网功能并只显示已下载的数据。
+        /// </summary>
+        bool isOnline = true;
+
+        /// <summary>
+        /// 是否只显示已下载的数据。
+        /// </summary>
+        bool filterUndownloaded = false;
+
+        List<ComponentModel> initializeDataSet = new List<ComponentModel>();
+        /// <summary>
+        /// 数据表是否已完成加载（防止排队的进度刷新覆盖完成提示）。
+        /// </summary>
+        volatile bool chibiListLoaded = false;
+        /// <summary>
+        /// 是否正在执行数据操作（下载/删除/更新列表等），期间禁止关闭窗口。
+        /// </summary>
+        volatile bool isBusy = false;
+
+        public DataManagerWindow()
+        {
+            InitializeComponent();
+            btnVersion.Content = $"程序版本：{productVersion}";
+        }
+
+        private void UpdateSharedVariables()
+        {
+            lblAnnouncement.Content = announcementMsg;
+        }
+
+        /// <summary>
+        /// 窗口显示后：鼠标改为 hourglass 并禁用窗口，后台自动加载各项内容，完成后恢复。
+        /// </summary>
+        private async void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            UpdateSharedVariables();
+            Cursor = System.Windows.Input.Cursors.Wait;
+            IsEnabled = false;
+            isBusy = true;
+            try
+            {
+                // 网络请求与数据表构建异步执行（数据表方法内部用 Dispatcher 回 UI）
+                await Task.Run(() =>
+                {
+                    isOnline = DetectOnline();
+                    filterUndownloaded = !isOnline;
+                    LoadChibiList();
+                });
+            }
+            catch (Exception ex)
+            {
+                if (!Properties.Settings.Default.SuppressLoadPrompts) GrowlHelper.ErrorGlobal($"初始化加载失败。\n{ex.Message}");
+            }
+            finally
+            {
+                Cursor = System.Windows.Input.Cursors.Arrow;
+                IsEnabled = true;
+                isBusy = false;
+                ApplyOfflineMode();
+            }
+        }
+
+        /// <summary>
+        /// 检测当前是否可联网（探测下载源地址）。
+        /// </summary>
+        private static bool DetectOnline()
+        {
+            if (Settings.Default.ForceOfflineMode == true) return false;
+
+            try
+            {
+                return HttpClass.UrlIsExists("https://api.brightsu.cn/");
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 未联网时禁用需要联网的功能按钮。
+        /// </summary>
+        private void ApplyOfflineMode()
+        {
+            if (isOnline)
+            {
+                return;
+            }
+            btn_sources.IsEnabled = false;
+            btn_LoadChibiList.IsEnabled = false;
+            chb_preview.IsChecked = false;
+            chb_preview.IsEnabled = false;
+            chb_save_cg.IsChecked = true;
+            chb_save_cg.IsEnabled = false;
+            Title += " [离线模式]";
+            lblAnnouncement.Content = "离线模式下，多数功能不可用。";
+            chb_filterUndownloaded.IsChecked = true;
+            chb_filterUndownloaded.IsEnabled = false;
+        }
+
+        /// <summary>
+        /// 读取并反序列化人形数据表。
+        /// </summary>
+        private RootObject ReadChibiList()
+        {
+            string str = File.ReadAllText($"{AppDir}chibi_list.json");
+            return JsonConvert.DeserializeObject<RootObject>(str);
+        }
+
+        /// <summary>
+        /// 从人形条目构建节点 Tag（12 个字段，供下载/加载/立绘逻辑使用）。
+        /// </summary>
+        private string[] CreateTag(Content content)
+        {
+            string[] tag = new string[12];
+            tag[0] = "True"; // displaySwitch
+            tag[1] = content.name;
+            tag[2] = content.parent;
+            tag[3] = content.type;
+            tag[4] = content.display;
+            tag[5] = content.display_full;
+            tag[6] = content.path;
+            tag[7] = content.filename;
+            tag[8] = content.cg;
+            tag[9] = content.cg_d;
+            tag[10] = content.filename_r;
+            tag[11] = content.files;
+            return tag;
+        }
+
+        /// <summary>
+        /// 将外部导入数据表（app\spine_external.json）的条目添加到 initializeDataSet 的"自定义"节点下。
+        /// </summary>
+        private void AddExternalNodes()
+        {
+            try
+            {
+                if (File.Exists($"{AppDir}spine_external.json"))
+                {
+                    ExternalRoot er = JsonConvert.DeserializeObject<ExternalRoot>(File.ReadAllText($"{AppDir}spine_external.json"));
+                    if (er?.content != null)
+                    {
+                        int extCounter = 0;
+                        foreach (ExternalContent ec in er.content)
+                        {
+                            extCounter++;
+                            ComponentModel node = new ComponentModel();
+                            node.ComponentName = $"ext_{ec.name}";
+                            node.Header = ec.display ?? ec.name;
+                            node.ComponentID = 100000 + extCounter;
+                            node.Tag = CreateExternalTag(ec);
+                            node.Foreground = type0color;
+                            node.ToolTip = ec.display ?? ec.name;
+                            node.ParentID = 151;
+                            node.Level = 2;
+                            initializeDataSet.Add(node);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
+        /// 从外部导入条目构建节点 Tag（复用 12 字段结构，tag[0] 标记为 External）。
+        /// </summary>
+        private string[] CreateExternalTag(ExternalContent content)
+        {
+            string[] tag = new string[12];
+            tag[0] = "External"; // 标记为外部数据
+            tag[1] = content.name;
+            tag[2] = content.name; // parent
+            tag[3] = "";          // type
+            tag[4] = content.display;
+            tag[5] = content.display;
+            tag[6] = content.path;
+            tag[7] = content.filename;
+            tag[8] = null;        // cg（外部数据无立绘）
+            tag[9] = null;        // cg_d
+            tag[10] = content.filename_r; // r{基名}（宿舍）
+            tag[11] = content.files;
+            return tag;
+        }
+
+        /// <summary>
+        /// 按 type 设置节点前景色。
+        /// </summary>
+        private void SetNodeColor(ComponentModel node, Content content)
+        {
+            if (content.category == "TDOLL")
+            {
+                if (content.type.Contains("0")) { node.Foreground = type0color; }
+                if (content.type.Contains("2")) { node.Foreground = type2color; }
+                if (content.type.Contains("3")) { node.Foreground = type3color; }
+                if (content.type.Contains("4")) { node.Foreground = type4color; }
+                if (content.type.Contains("5")) { node.Foreground = type5color; }
+                if (content.type.Contains("6")) { node.Foreground = type6color; }
+                if (content.type.Contains("7")) { node.Foreground = type7color; }
+            }
+            else if (content.category == "ENEMY")
+            {
+                if (content.type.Contains("0")) { node.Foreground = type0color; }
+                if (content.type.Contains("1")) { node.Foreground = type2color; }
+                if (content.type.Contains("2")) { node.Foreground = type3color; }
+                if (content.type.Contains("3")) { node.Foreground = type5color; }
+            }
+        }
+
+        /// <summary>
+        /// 构建树：按 ParentID 建立索引一次扫描，递归时 O(1) 查找，避免 O(n²)。
+        /// </summary>
+        private List<ComponentModel> BuildTree()
+        {
+            var index = new Dictionary<int, List<ComponentModel>>();
+            foreach (var item in initializeDataSet)
+            {
+                if (!index.TryGetValue(item.ParentID, out var list))
+                {
+                    list = new List<ComponentModel>();
+                    index[item.ParentID] = list;
+                }
+                list.Add(item);
+            }
+            return BuildTree(0, index);
+        }
+
+        private List<ComponentModel> BuildTree(int id, Dictionary<int, List<ComponentModel>> index)
+        {
+            if (!index.TryGetValue(id, out var node)) return new List<ComponentModel>();
+            foreach (var item in node)
+            {
+                item.Children = BuildTree(item.ComponentID, index);
+            }
+            return node;
+        }
+
+        /// <summary>
+        /// 移除没有子节点的一级分类（Level<3 且没有子项指向它）。
+        /// 外部导入节点（ext_ 前缀）是叶子数据节点，不应被当作空分类移除。
+        /// </summary>
+        private void RemoveEmptyParents(Dictionary<int, List<ComponentModel>> index)
+        {
+            bool removed;
+            do
+            {
+                removed = false;
+                var emptyParents = initializeDataSet.Where(n =>
+                    n.Level < 3 &&
+                    !n.ComponentName.StartsWith("ext_") &&
+                    (!index.TryGetValue(n.ComponentID, out var children) || children.Count == 0)).ToList();
+                foreach (var ep in emptyParents)
+                {
+                    initializeDataSet.Remove(ep);
+                    if (index.TryGetValue(ep.ParentID, out var pl))
+                    {
+                        pl.Remove(ep);
+                    }
+                    removed = true;
+                }
+            } while (removed);
+        }
+
+        /// <summary>
+        /// 判断某个模型数据目录是否已下载（普通数据目录或外部导入目录）。
+        /// </summary>
+        private static bool IsDownloaded(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return false;
+            }
+            if (Directory.Exists($@"{AppDir}assets/spine/{path}"))
+            {
+                return true;
+            }
+            if (Directory.Exists($@"{AppDir}assets/spine_external/{path}"))
+            {
+                return true;
+            }
+            return false;
+        }
+
+        SolidColorBrush defaultColor = new SolidColorBrush(Color.FromRgb(255, 255, 255));
+        SolidColorBrush type0color = new SolidColorBrush(Color.FromRgb(255, 111, 181));
+        SolidColorBrush type2color = new SolidColorBrush(Color.FromRgb(234, 234, 234));
+        SolidColorBrush type3color = new SolidColorBrush(Color.FromRgb(107, 218, 199));
+        SolidColorBrush type4color = new SolidColorBrush(Color.FromRgb(209, 223, 91));
+        SolidColorBrush type5color = new SolidColorBrush(Color.FromRgb(254, 179, 0));
+        SolidColorBrush type6color = new SolidColorBrush(Color.FromRgb(252, 79, 0));
+        SolidColorBrush type7color = new SolidColorBrush(Color.FromRgb(222, 182, 255));
+
+        public void LoadChibiList()
+        {
+            chibiListLoaded = false;
+            KillEmptyDirectory($@"{AppDir}assets/spine");
+            Dispatcher.Invoke(() => sbQuery.Clear());
+
+            initializeDataSet.Clear();
+
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 1, ComponentName = "HGclass", Level = 1, ParentID = 0, ToolTip = "手枪人形", Header = "手枪(HG)", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 2, ComponentName = "HG2class", Level = 2, ParentID = 1, ToolTip = "初始二星手枪人形", Header = "★★", Foreground = type2color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 3, ComponentName = "HG3class", Level = 2, ParentID = 1, ToolTip = "初始三星手枪人形", Header = "★★★", Foreground = type3color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 4, ComponentName = "HG4class", Level = 2, ParentID = 1, ToolTip = "初始四星手枪人形", Header = "★★★★", Foreground = type4color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 5, ComponentName = "HG5class", Level = 2, ParentID = 1, ToolTip = "初始五星手枪人形", Header = "★★★★★", Foreground = type5color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 7, ComponentName = "HG7class", Level = 2, ParentID = 1, ToolTip = "特典手枪人形", Header = "★EXTRA", Foreground = type7color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 9, ComponentName = "HG0class", Level = 2, ParentID = 1, ToolTip = "特殊手枪人形", Header = "SPECIAL", Foreground = type0color });
+
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 11, ComponentName = "SMGclass", Level = 1, ParentID = 0, ToolTip = "冲锋枪人形", Header = "冲锋枪(SMG)", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 12, ComponentName = "SMG2class", Level = 2, ParentID = 11, ToolTip = "初始二星冲锋枪人形", Header = "★★", Foreground = type2color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 13, ComponentName = "SMG3class", Level = 2, ParentID = 11, ToolTip = "初始三星冲锋枪人形", Header = "★★★", Foreground = type3color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 14, ComponentName = "SMG4class", Level = 2, ParentID = 11, ToolTip = "初始四星冲锋枪人形", Header = "★★★★", Foreground = type4color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 15, ComponentName = "SMG5class", Level = 2, ParentID = 11, ToolTip = "初始五星冲锋枪人形", Header = "★★★★★", Foreground = type5color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 17, ComponentName = "SMG7class", Level = 2, ParentID = 11, ToolTip = "特典冲锋枪人形", Header = "★EXTRA", Foreground = type7color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 19, ComponentName = "SMG0class", Level = 2, ParentID = 11, ToolTip = "特殊冲锋枪人形", Header = "SPECIAL", Foreground = type0color });
+
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 21, ComponentName = "RFclass", Level = 1, ParentID = 0, ToolTip = "步枪人形", Header = "步枪(RF)", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 22, ComponentName = "RF2class", Level = 2, ParentID = 21, ToolTip = "初始二星步枪人形", Header = "★★", Foreground = type2color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 23, ComponentName = "RF3class", Level = 2, ParentID = 21, ToolTip = "初始三星步枪人形", Header = "★★★", Foreground = type3color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 24, ComponentName = "RF4class", Level = 2, ParentID = 21, ToolTip = "初始四星步枪人形", Header = "★★★★", Foreground = type4color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 25, ComponentName = "RF5class", Level = 2, ParentID = 21, ToolTip = "初始五星步枪人形", Header = "★★★★★", Foreground = type5color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 27, ComponentName = "RF7class", Level = 2, ParentID = 21, ToolTip = "特典步枪人形", Header = "★EXTRA", Foreground = type7color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 29, ComponentName = "RF0class", Level = 2, ParentID = 21, ToolTip = "特殊步枪人形", Header = "SPECIAL", Foreground = type0color });
+
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 31, ComponentName = "ARclass", Level = 1, ParentID = 0, ToolTip = "突击步枪人形", Header = "突击步枪(AR)", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 32, ComponentName = "AR2class", Level = 2, ParentID = 31, ToolTip = "初始二星突击步枪人形", Header = "★★", Foreground = type2color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 33, ComponentName = "AR3class", Level = 2, ParentID = 31, ToolTip = "初始三星突击步枪人形", Header = "★★★", Foreground = type3color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 34, ComponentName = "AR4class", Level = 2, ParentID = 31, ToolTip = "初始四星突击步枪人形", Header = "★★★★", Foreground = type4color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 35, ComponentName = "AR5class", Level = 2, ParentID = 31, ToolTip = "初始五星突击步枪人形", Header = "★★★★★", Foreground = type5color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 37, ComponentName = "AR7class", Level = 2, ParentID = 31, ToolTip = "特典突击步枪人形", Header = "★EXTRA", Foreground = type7color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 39, ComponentName = "AR0class", Level = 2, ParentID = 31, ToolTip = "特殊突击步枪人形", Header = "SPECIAL", Foreground = type0color });
+
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 41, ComponentName = "MGclass", Level = 1, ParentID = 0, ToolTip = "机枪人形", Header = "机枪(MG)", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 42, ComponentName = "MG2class", Level = 2, ParentID = 41, ToolTip = "初始二星机枪人形", Header = "★★", Foreground = type2color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 43, ComponentName = "MG3class", Level = 2, ParentID = 41, ToolTip = "初始三星机枪人形", Header = "★★★", Foreground = type3color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 44, ComponentName = "MG4class", Level = 2, ParentID = 41, ToolTip = "初始四星机枪人形", Header = "★★★★", Foreground = type4color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 45, ComponentName = "MG5class", Level = 2, ParentID = 41, ToolTip = "初始五星机枪人形", Header = "★★★★★", Foreground = type5color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 47, ComponentName = "MG7class", Level = 2, ParentID = 41, ToolTip = "特典机枪人形", Header = "★EXTRA", Foreground = type7color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 49, ComponentName = "MG0class", Level = 2, ParentID = 41, ToolTip = "特殊机枪人形", Header = "SPECIAL", Foreground = type0color });
+
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 51, ComponentName = "SGclass", Level = 1, ParentID = 0, ToolTip = "霰弹枪人形", Header = "霰弹枪(SG)", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 52, ComponentName = "SG2class", Level = 2, ParentID = 51, ToolTip = "初始二星霰弹枪人形", Header = "★★", Foreground = type2color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 53, ComponentName = "SG3class", Level = 2, ParentID = 51, ToolTip = "初始三星霰弹枪人形", Header = "★★★", Foreground = type3color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 54, ComponentName = "SG4class", Level = 2, ParentID = 51, ToolTip = "初始四星霰弹枪人形", Header = "★★★★", Foreground = type4color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 55, ComponentName = "SG5class", Level = 2, ParentID = 51, ToolTip = "初始五星霰弹枪人形", Header = "★★★★★", Foreground = type5color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 57, ComponentName = "SG7class", Level = 2, ParentID = 51, ToolTip = "特典霰弹枪人形", Header = "★EXTRA", Foreground = type7color });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 59, ComponentName = "SG0class", Level = 2, ParentID = 51, ToolTip = "特殊霰弹枪人形", Header = "SPECIAL", Foreground = type0color });
+
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 61, ComponentName = "HOCclass", Level = 1, ParentID = 0, ToolTip = "重装部队人形", Header = "重装部队(HOC)", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 62, ComponentName = "MTRclass", Level = 2, ParentID = 61, ToolTip = "迫击炮人形", Header = "迫击炮(MTR)", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 63, ComponentName = "ATWclass", Level = 2, ParentID = 61, ToolTip = "反坦克武器人形", Header = "反坦克武器(ATW)", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 64, ComponentName = "AGLclass", Level = 2, ParentID = 61, ToolTip = "榴弹发射器人形", Header = "榴弹发射器(AGL)", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 69, ComponentName = "HOCunclass", Level = 2, ParentID = 61, ToolTip = "未分类其它", Header = "未分类其它", Foreground = defaultColor });
+
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 71, ComponentName = "NPCclass", Level = 1, ParentID = 0, ToolTip = "NPC", Header = "NPC", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 72, ComponentName = "HUMANclass", Level = 2, ParentID = 71, ToolTip = "人类", Header = "人类", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 79, ComponentName = "NPCunclass", Level = 2, ParentID = 71, ToolTip = "未分类其它", Header = "未分类其它", Foreground = defaultColor });
+
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 81, ComponentName = "ENEMYclass", Level = 1, ParentID = 0, ToolTip = "敌方势力单位", Header = "敌方势力", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 82, ComponentName = "SANGVISclass", Level = 2, ParentID = 81, ToolTip = "铁血工造势力", Header = "铁血工造", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 83, ComponentName = "KCCOclass", Level = 2, ParentID = 81, ToolTip = "正规军势力", Header = "正规军", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 84, ComponentName = "PARADEUSclass", Level = 2, ParentID = 81, ToolTip = "帕拉蒂斯势力", Header = "帕拉蒂斯", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 85, ComponentName = "ETCclass", Level = 2, ParentID = 81, ToolTip = "其它势力", Header = "其它", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 89, ComponentName = "ENEMYunclass", Level = 2, ParentID = 81, ToolTip = "未分类其它", Header = "未分类其它", Foreground = defaultColor });
+
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 101, ComponentName = "OTHERclass", Level = 1, ParentID = 0, ToolTip = "其它人形", Header = "其它", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 102, ComponentName = "TDOLLunclass", Level = 2, ParentID = 101, ToolTip = "未分类的战术人形", Header = "战术人形", Foreground = defaultColor });
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 109, ComponentName = "UNKNOWNclass", Level = 2, ParentID = 101, ToolTip = "未分类的数据", Header = "未分类", Foreground = defaultColor });
+
+            initializeDataSet.Add(new ComponentModel() { ComponentID = 151, ComponentName = "CUSTOMclass", Level = 1, ParentID = 0, ToolTip = "导入的外部数据", Header = "自定义", Foreground = type0color });
+
+            AddExternalNodes();
+
+            try
+            {
+                RootObject rb = ReadChibiList();
+                int total = rb.content.Count;
+                Dispatcher.Invoke(() =>
+                {
+                    btn_LoadChibiList.ToolTip = $"从服务器重新加载数据列表\n当前人形数据列表版本 {rb.meta.version}";
+                    pb_loader.IsIndeterminate = false;
+                    pb_loader.Maximum = total;
+                    pb_loader.Value = 0;
+                    tii.ProgressState = System.Windows.Shell.TaskbarItemProgressState.Normal;
+                    tii.ProgressValue = 0;
+                });
+
+                int counter = 0;
+                // 过滤掉未下载的节点，预扫描需要保留的主节点（自身已下载 或 存在已下载的皮肤子节点）
+                var keepMains = new HashSet<string>();
+                if (filterUndownloaded)
+                {
+                    foreach (var c in rb.content)
+                    {
+                        if (c.name == c.parent)
+                        {
+                            if (IsDownloaded(c.path)) keepMains.Add(c.name);
+                        }
+                        else if (IsDownloaded(c.path))
+                        {
+                            keepMains.Add(c.parent);
+                        }
+                    }
+                }
+
+                foreach (Content content in rb.content)
+                {
+                    counter++;
+                    content.type = content.type ?? "";
+                    content.display = content.display ?? content.name;
+                    content.display_full = content.display_full ?? content.display;
+
+                    // 逐条刷新 UI 会阻塞线程，改为按批次刷新
+                    if (counter % 200 == 0)
+                    {
+                        int c = counter;
+                        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+                        {
+                            if (chibiListLoaded) return;
+                            txt_loader.Text = $"正在处理：{c} / {total}";
+                            pb_loader.Value = c;
+                            tii.ProgressValue = (double)c / total;
+                        }));
+                    }
+                    try
+                    {
+                        ComponentModel node = new ComponentModel();
+                        node.ComponentName = $"dummy_{content.name.Replace(" ", string.Empty)}";
+                        node.Header = content.display;
+                        node.ComponentID = 200 + counter;
+                        node.Tag = CreateTag(content);
+                        node.Foreground = defaultColor;
+                        node.ToolTip = content.display_full;
+                        SetNodeColor(node, content);
+
+                        node.ParentID = 109;
+
+                        if (content.name == content.parent)
+                        {
+                            // 自身未下载且无任何已下载子节点时才过滤
+                            if (filterUndownloaded && !keepMains.Contains(content.name))
+                            {
+                                continue;
+                            }
+                            node.Level = 3;
+                            if (content.category == "TDOLL")
+                            {
+                                switch (content.type.ToUpper())
+                                {
+                                    case "HG2": node.ParentID = 2; break;
+                                    case "HG3": node.ParentID = 3; break;
+                                    case "HG4": node.ParentID = 4; break;
+                                    case "HG5": node.ParentID = 5; break;
+                                    case "HG7": node.ParentID = 7; break;
+                                    case "HG0": node.ParentID = 9; break;
+                                    case "SMG2": node.ParentID = 12; break;
+                                    case "SMG3": node.ParentID = 13; break;
+                                    case "SMG4": node.ParentID = 14; break;
+                                    case "SMG5": node.ParentID = 15; break;
+                                    case "SMG7": node.ParentID = 17; break;
+                                    case "SMG0": node.ParentID = 19; break;
+                                    case "RF2": node.ParentID = 22; break;
+                                    case "RF3": node.ParentID = 23; break;
+                                    case "RF4": node.ParentID = 24; break;
+                                    case "RF5": node.ParentID = 25; break;
+                                    case "RF7": node.ParentID = 27; break;
+                                    case "RF0": node.ParentID = 29; break;
+                                    case "AR2": node.ParentID = 32; break;
+                                    case "AR3": node.ParentID = 33; break;
+                                    case "AR4": node.ParentID = 34; break;
+                                    case "AR5": node.ParentID = 35; break;
+                                    case "AR7": node.ParentID = 37; break;
+                                    case "AR0": node.ParentID = 39; break;
+                                    case "MG2": node.ParentID = 42; break;
+                                    case "MG3": node.ParentID = 43; break;
+                                    case "MG4": node.ParentID = 44; break;
+                                    case "MG5": node.ParentID = 45; break;
+                                    case "MG7": node.ParentID = 47; break;
+                                    case "MG0": node.ParentID = 49; break;
+                                    case "SG2": node.ParentID = 52; break;
+                                    case "SG3": node.ParentID = 53; break;
+                                    case "SG4": node.ParentID = 54; break;
+                                    case "SG5": node.ParentID = 55; break;
+                                    case "SG7": node.ParentID = 57; break;
+                                    case "SG0": node.ParentID = 59; break;
+                                    default: node.ParentID = 102; break;
+                                }
+                            }
+                            else if (content.category == "HOC")
+                            {
+                                switch (content.type.ToUpper())
+                                {
+                                    case "MTR": node.ParentID = 62; break;
+                                    case "ATW": node.ParentID = 63; break;
+                                    case "AGL": node.ParentID = 64; break;
+                                    default: node.ParentID = 69; break;
+                                }
+                            }
+                            else if (content.category == "NPC")
+                            {
+                                switch (content.type.ToUpper())
+                                {
+                                    case "HUMAN": node.ParentID = 72; break;
+                                    default: node.ParentID = 79; break;
+                                }
+                            }
+                            else if (content.category == "ENEMY")
+                            {
+                                if (content.type != "")
+                                {
+                                    switch (content.type.ToUpper().Substring(0, content.type.Length - 1))
+                                    {
+                                        case "SANGVIS": node.ParentID = 82; break;
+                                        case "KCCO": node.ParentID = 83; break;
+                                        case "PARADEUS": node.ParentID = 84; break;
+                                        case "ETC": node.ParentID = 85; break;
+                                        default: node.ParentID = 89; break;
+                                    }
+                                }
+                            }
+                            initializeDataSet.Add(node);
+                        }
+                        else
+                        {
+                            // 过滤掉未下载的皮肤子节点自身未下载则过滤
+                            if (filterUndownloaded && !IsDownloaded(content.path))
+                            {
+                                continue;
+                            }
+                            node.Level = 4;
+                            node.ParentID = 109;
+                            foreach (ComponentModel item in initializeDataSet)
+                            {
+                                if (item.ComponentName == $"dummy_{content.parent.Replace(" ", string.Empty)}")
+                                {
+                                    node.ParentID = item.ComponentID;
+                                }
+                            }
+                            initializeDataSet.Add(node);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.Invoke(() => { GrowlHelper.ErrorGlobal($"构建人形数据列表时出错。\n{ex}"); });
+                    }
+                }
+
+
+                // 移除没有子节点的一级分类并构建树（索引化，避免 O(n²)）
+                var childrenIndex = new Dictionary<int, List<ComponentModel>>();
+                foreach (var item in initializeDataSet)
+                {
+                    if (!childrenIndex.TryGetValue(item.ParentID, out var list))
+                    {
+                        list = new List<ComponentModel>();
+                        childrenIndex[item.ParentID] = list;
+                    }
+                    list.Add(item);
+                }
+                RemoveEmptyParents(childrenIndex);
+                List<ComponentModel> tree = BuildTree(0, childrenIndex);
+
+                int loaded = counter;
+                chibiListLoaded = true;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    tv_InternalSelector.ItemsSource = tree;
+                    txt_loader.Text = $"已加载 {loaded} 条数据，等待下一步操作";
+                    pb_loader.IsIndeterminate = true;
+                    tii.ProgressValue = 100;
+                    tii.ProgressState = System.Windows.Shell.TaskbarItemProgressState.Indeterminate;
+                }));
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.BeginInvoke(() => { if (!Properties.Settings.Default.SuppressLoadPrompts) GrowlHelper.ErrorGlobal($"加载人形数据列表时出错。\n{ex}"); });
+            }
+            Dispatcher.BeginInvoke(() => tvAfterSelect());
+        }
+
+        private ComponentModel SelectedItem;
+        private void tv_InternalSelector_Selected(object sender, RoutedEventArgs e)
+        {
+            lbl_InternalSelected.Content = "请选择要加载的人形";
+            lbl_InternalSelected.Foreground = defaultColor;
+            lblSelectedItem.Content = "未选择";
+            lblSelectedItem.Foreground = defaultColor;
+
+            img_Preview.Source = null;
+
+            TreeViewItem tvi = e.OriginalSource as TreeViewItem;
+            ComponentModel item = (ComponentModel)tvi.Header;
+            SelectedItem = item;
+
+            tvAfterSelect();
+        }
+
+        private void tvAfterSelect()
+        {
+            ComponentModel item = SelectedItem;
+
+            btn_downloadData.IsEnabled = false;
+            btn_downloadData.Visibility = Visibility.Visible;
+            btn_deleteData.IsEnabled = false;
+            btn_deleteData.Visibility = Visibility.Collapsed;
+            btn_loadCG.IsEnabled = false;
+            chb_save_cg.IsEnabled = false;
+            btn_loadData.IsEnabled = false;
+            btn_loadDefaultData.IsEnabled = false;
+            btn_loadDormData.IsEnabled = false;
+            btng_loadData.Visibility = Visibility.Collapsed;
+
+            if (item is not null)
+            {
+                lbl_InternalSelected.Content = item.ToolTip.Replace("_", "__");
+                lbl_InternalSelected.Foreground = item.Foreground;
+                if (!item.ComponentName.Contains("class"))
+                {
+                    KillEmptyDirectory($@"{AppDir}assets/spine");
+
+                    string[] tagString = new string[12];
+                    tagString[0] = item.Tag[0];//displaySwitch
+                    tagString[1] = item.Tag[1];//content.name;
+                    tagString[2] = item.Tag[2];//content.parent;
+                    tagString[3] = item.Tag[3];//content.type;
+                    tagString[4] = item.Tag[4];//content.display;
+                    tagString[5] = item.Tag[5];//content.display_full;
+                    tagString[6] = item.Tag[6];//content.path;
+                    tagString[7] = item.Tag[7];//content.filename;
+                    tagString[8] = item.Tag[8];//content.cg;
+                    tagString[9] = item.Tag[9];//content.cg_d;
+                    tagString[10] = item.Tag[10];//content.filename_r;
+                    tagString[11] = item.Tag[11];//content.files;
+
+                    lblSelectedItem.Content = tagString[1].Replace("_", "__");
+                    lblSelectedItem.Foreground = item.Foreground;
+
+                    if (tagString[8] != null)
+                    {
+                        // 已有本地立绘时可离线加载查看；否则需联网在线加载
+                        bool hasLocalCG = (!string.IsNullOrEmpty(tagString[8]) && File.Exists($@"{AppDir}assets/pic/{tagString[8]}"))
+                                       || (!string.IsNullOrEmpty(tagString[9]) && File.Exists($@"{AppDir}assets/pic/{tagString[9]}"));
+                        btn_loadCG.IsEnabled = isOnline || hasLocalCG;
+                        // 立绘正在被显示时禁用删除按钮
+                        btn_deleteCG.IsEnabled = hasLocalCG && !IsCgInUse(tagString[8], tagString[9]);
+                        chb_save_cg.IsEnabled = isOnline;
+                        string cg_filename = tagString[8];
+                        if ((bool)chb_preview_d.IsChecked) //默认大破立绘
+                        {
+                            if (tagString[9] != null)
+                            {
+                                cg_filename = tagString[9];
+                            }
+                        }
+                        string cgURL = $@"{AppDir}assets/pic/{cg_filename}";
+                        try
+                        {
+                            if (File.Exists(cgURL))
+                            {
+                                // OnLoad：加载后立即释放文件句柄，避免预览占用立绘文件导致无法删除
+                                var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                                bmp.BeginInit();
+                                bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                                bmp.UriSource = new Uri(cgURL, UriKind.Absolute);
+                                bmp.EndInit();
+                                img_Preview.Source = bmp;
+                                btn_loadCG.IsEnabled = true;
+                            }
+                            else
+                            {
+                                if ((bool)chb_preview.IsChecked)
+                                {
+                                    img_Preview.Source = new System.Windows.Media.Imaging.BitmapImage(new Uri($"{Settings.Default.DownloadSource}pic/{cg_filename}", UriKind.Absolute));
+                                }
+                            }
+                        }
+                        catch (Exception)
+                        {
+
+                        }
+                    }
+
+                    if ((tagString[6] != null) && (tagString[7] != null) && (tagString[11] != null)) //存在数据
+                    {
+                        btn_downloadData.IsEnabled = isOnline;
+                        btn_downloadData.Visibility = Visibility.Visible;
+                        bool isExternal = tagString[0] == "External";
+                        string spineRoot = isExternal ? "spine_external" : "spine";
+                        if (isExternal)
+                        {
+                            // 外部数据没有服务器下载源：禁用下载按钮
+                            btn_downloadData.IsEnabled = false;
+                            btn_downloadData.Visibility = Visibility.Collapsed;
+                            btn_deleteData.IsEnabled = true;
+                            btn_deleteData.Visibility = Visibility.Visible;
+                        }
+
+                        if (Directory.Exists($@"{AppDir}assets/{spineRoot}/{tagString[6]}"))
+                        {
+                            bool checkResult = true;
+                            foreach (string filename in tagString[11].Split('|'))
+                            {
+                                if (!File.Exists($@"{AppDir}assets/{spineRoot}/{tagString[6]}/{filename}"))
+                                {
+                                    checkResult = false;
+                                }
+                            }
+                            if (checkResult)
+                            {
+                                // 数据已完整下载：隐藏下载，显示删除（但正在使用的数据不允许删除）
+                                btn_downloadData.IsEnabled = false;
+                                btn_downloadData.Visibility = Visibility.Collapsed;
+                                // 实时查询主窗口正在使用的实例
+                                string loadedKey = $"{spineRoot}/{tagString[6]}";
+                                bool inUse = LoadedPaths.Contains(loadedKey) || (OwnerMainWindow?.GetLoadedPaths().Contains(loadedKey) ?? false);
+                                btn_deleteData.IsEnabled = !inUse;
+                                btn_deleteData.Visibility = Visibility.Visible;
+                                if (inUse)
+                                {
+                                    btn_deleteData.ToolTip = "该数据正在被桌宠使用，无法删除";
+                                }
+                                else
+                                {
+                                    btn_deleteData.ToolTip = "删除选定人形的骨骼数据";
+                                }
+
+                                btn_loadData.IsEnabled = true;
+                                btn_loadDefaultData.IsEnabled = true;
+                                if (tagString[10] != null)
+                                {
+                                    btng_loadData.Visibility = Visibility.Visible;
+                                    btn_loadDormData.IsEnabled = true;
+                                }
+                            }
+                        }
+                    }
+
+                }
+            }
+        }
+
+        private async void btn_LoadChibiList_Click(object sender, RoutedEventArgs e)
+        {
+            btn_LoadChibiList.IsEnabled = false;
+            isBusy = true;
+            try
+            {
+                await LoadChibiListCore();
+            }
+            catch (Exception ex)
+            {
+                if (!Properties.Settings.Default.SuppressConnectionErrorPrompts) GrowlHelper.ErrorGlobal($"获取与更新数据表时出错。\n{ex.Message}");
+            }
+            finally
+            {
+                btn_LoadChibiList.IsEnabled = true;
+                isBusy = false;
+            }
+        }
+
+        /// <summary>
+        /// 刷新人形数据表：网络请求异步执行，避免阻塞 UI。
+        /// </summary>
+        private async Task LoadChibiListCore()
+        {
+            var (postOk, responseStr) = await HttpRequestHelper.PostWebRequestAsync(chibiListLink, string.Empty, Encoding.UTF8);
+
+            if (postOk)
+            {
+                ChibiListRoot rt = JsonConvert.DeserializeObject<ChibiListRoot>(responseStr);
+
+                if (rt.ret != 200) //API请求失败
+                {
+                    if (File.Exists($"{AppDir}chibi_list.json"))//本地存在即加载本地
+                    {
+                        LoadChibiList();
+                    }
+                    else
+                    {
+                        MessageBoxResult downloadListResult = MessageBox.Show("本地人形数据表不存在，且 API 接口调用失败。加载进程已中止。\n是否重试？", "数据表加载失败", MessageBoxButton.YesNo, MessageBoxImage.Exclamation, MessageBoxResult.Yes);
+                        if (downloadListResult == MessageBoxResult.Yes)
+                        {
+                            await LoadChibiListCore();
+                        }
+                    }
+                    return;
+                }
+
+                if (File.Exists($"{AppDir}chibi_list.json"))//API请求成功，本地存在
+                {
+                    RootObject rb = ReadChibiList();
+                    if (rt.data.uuid != rb.meta.uuid)//有新版本
+                    {
+                        sp_downloader.Visibility = Visibility.Visible;
+                        txt_loader.Text = "正在更新人形数据表";
+                        HttpClass.DownloadFile(rt.data.url, $"{AppDir}chibi_list.json", pb_downloader, txt_downloader);
+                        sp_downloader.Visibility = Visibility.Collapsed;
+                        await LoadChibiListCore();
+                        return;
+                    }
+                    else//相同则加载本地
+                    {
+                        LoadChibiList();
+                    }
+                }
+                else//API成功，本地不存在
+                {
+                    bool downloaded = HttpClass.DownloadFile(rt.data.url, $"{AppDir}chibi_list.json", pb_loader, txt_loader);
+                    if (downloaded)
+                    {
+                        await LoadChibiListCore();
+                    }
+                    else
+                    {
+                        if (!Properties.Settings.Default.SuppressConnectionErrorPrompts) GrowlHelper.ErrorGlobal("数据表下载失败");
+                    }
+                }
+            }
+            else //API请求失败
+            {
+                if (File.Exists($"{AppDir}chibi_list.json"))//存在本地即加载本地
+                {
+                    LoadChibiList();
+                }
+                else
+                {
+                    MessageBoxResult downloadListResult = MessageBox.Show("本地数据表不存在，且 API 接口调用失败。加载进程已中止。\n是否重试？", "数据表加载失败", MessageBoxButton.YesNo, MessageBoxImage.Exclamation, MessageBoxResult.Yes);
+                    if (downloadListResult == MessageBoxResult.Yes)
+                    {
+                        await LoadChibiListCore();
+                    }
+                }
+            }
+        }
+
+
+        private async void btn_loadCG_Click(object sender, RoutedEventArgs e)
+        {
+            ComponentModel item = SelectedItem;
+            string[] tagString = new string[10];
+            tagString[0] = item.Tag[0];//displaySwitch
+            tagString[1] = item.Tag[1];//content.name;
+            tagString[2] = item.Tag[2];//content.parent;
+            tagString[3] = item.Tag[3];//content.type;
+            tagString[4] = item.Tag[4];//content.display;
+            tagString[5] = item.Tag[5];//content.display_full;
+            tagString[6] = item.Tag[6];//content.path;
+            tagString[7] = item.Tag[7];//content.filename;
+            tagString[8] = item.Tag[8];//content.cg;
+            tagString[9] = item.Tag[9];//content.cg_d;
+
+            bool cg = false;
+            bool cg_d = false;
+            bool local_cg = false;
+            bool local_cg_d = false;
+
+            if (tagString[8] != null)
+            {
+                cg = true;
+                local_cg = File.Exists($@"{AppDir}assets/pic/{tagString[8]}");
+            }
+            if (tagString[9] != null)
+            {
+                cg_d = true;
+                local_cg_d = File.Exists($@"{AppDir}assets/pic/{tagString[9]}");
+            }
+
+            if (cg) //存在立绘
+            {
+                if (cg && cg_d) //同时存在两种立绘
+                {
+                    if (local_cg && local_cg_d) //本地同时存在两种立绘，直接加载
+                    {
+                        new CGWindow().LoadCG(tagString[5], $@"{AppDir}assets/pic/", tagString[8], tagString[9]);
+                    }
+                    else
+                    {
+                        if ((bool)chb_save_cg.IsChecked)
+                        {
+                            await DownloadCG(tagString);
+                        }
+                        else
+                        {
+                            new CGWindow().LoadCG(tagString[5], $"{Settings.Default.DownloadSource}/pic/", tagString[8], tagString[9]);
+                        }
+                    }
+                }
+                else //只有一种立绘
+                {
+                    if (local_cg) //本地存在，直接加载
+                    {
+                        new CGWindow().LoadCG(tagString[5], $@"{AppDir}assets/pic/", tagString[8]);
+                    }
+                    else
+                    {
+                        if ((bool)chb_save_cg.IsChecked)
+                        {
+                            await DownloadCG(tagString);
+                        }
+                        else
+                        {
+                            new CGWindow().LoadCG(tagString[5], $"{Settings.Default.DownloadSource}/pic/", tagString[8]);
+                        }
+                    }
+                }
+                // 立绘已打开（被占用），立即禁用删除按钮
+                btn_deleteCG.IsEnabled = false;
+            }
+            else
+            {
+                if (!Properties.Settings.Default.SuppressLoadPrompts) GrowlHelper.InfoGlobal($"{tagString[5]} ({tagString[1]}) 没有对应的立绘数据。");
+            }
+        }
+
+        private async Task DownloadCG(string[] tagString)
+        {
+            isBusy = true;
+            try
+            {
+                tv_InternalSelector.IsEnabled = false;
+                btn_loadCG.IsEnabled = false;
+                chb_save_cg.IsEnabled = false;
+                btn_downloadData.IsEnabled = false;
+
+                string cg_url = Settings.Default.DownloadSource + "pic/";
+
+                if (!Directory.Exists($@"{AppDir}assets/pic"))
+                {
+                    Directory.CreateDirectory($@"{AppDir}assets/pic");
+                }
+                sp_downloader.Visibility = Visibility.Visible;
+                pb_loader.IsIndeterminate = false;
+                pb_loader.Value = 0;
+                pb_loader.Maximum = 1;
+                if (tagString[9] != null)
+                {
+                    txt_loader.Text = $"正在下载 {tagString[5]} 的大破立绘数据";
+                    pb_loader.Maximum = 2;
+                    await HttpClass.DownloadFileAsync($"{cg_url}/{tagString[9]}", $@"{AppDir}assets/pic/{tagString[9]}", (current, total) =>
+                    {
+                        pb_downloader.Maximum = (int)total;
+                        pb_downloader.Value = (int)current;
+                        txt_downloader.Text = $"{current} / {total}";
+                    });
+                    pb_loader.Value++;
+                }
+                txt_loader.Text = $"正在下载 {tagString[5]} 的立绘数据";
+                await HttpClass.DownloadFileAsync($"{cg_url}/{tagString[8]}", $@"{AppDir}assets/pic/{tagString[8]}", (current, total) =>
+                {
+                    pb_downloader.Maximum = (int)total;
+                    pb_downloader.Value = (int)current;
+                    txt_downloader.Text = $"{current} / {total}";
+                });
+                pb_loader.Value++;
+                sp_downloader.Visibility = Visibility.Collapsed;
+                txt_loader.Text = "准备就绪";
+                pb_loader.IsIndeterminate = true;
+
+                if (tagString[9] != null)
+                {
+                    new CGWindow().LoadCG(tagString[5], $@"{AppDir}assets/pic/", tagString[8], tagString[9]);
+                }
+                else
+                {
+                    new CGWindow().LoadCG(tagString[5], $@"{AppDir}assets/pic/", tagString[8]);
+                }
+
+                tv_InternalSelector.IsEnabled = true;
+                btn_loadCG.IsEnabled = true;
+                chb_save_cg.IsEnabled = isOnline;
+                tvAfterSelect();
+            }
+            finally
+            {
+                isBusy = false;
+            }
+        }
+
+
+
+        /// <summary>
+        /// 删除掉空文件夹
+        /// 所有没有子"文件系统"的都将被删除
+        /// </summary>
+        /// <param name="storagepath"></param>
+        private void KillEmptyDirectory(String storagepath)
+        {
+            if (Directory.Exists(storagepath))
+            {
+                DirectoryInfo dir = new DirectoryInfo(storagepath);
+                DirectoryInfo[] subdirs = dir.GetDirectories("*.*", SearchOption.AllDirectories);
+                foreach (DirectoryInfo subdir in subdirs)
+                {
+                    FileSystemInfo[] subFiles = subdir.GetFileSystemInfos();
+                    if (subFiles.Count() == 0)
+                    {
+                        subdir.Delete();
+                    }
+                }
+            }
+        }
+
+        private void btn_loadData_Click(object sender, RoutedEventArgs e)
+        {
+            ComponentModel item = SelectedItem;
+            LoadInternalSpine(item.Tag, false);
+        }
+
+        private void btn_loadDormData_Click(object sender, RoutedEventArgs e)
+        {
+            ComponentModel item = SelectedItem;
+            LoadInternalSpine(item.Tag, true);
+        }
+
+        private void LoadInternalSpine(string[] tagString, bool dormMode)
+        {
+            bool isExternal = tagString[0] == "External";
+            string spineRoot = isExternal ? "spine_external" : "spine";
+
+            string AtlasFile = $@"assets/{spineRoot}/{tagString[6]}/{tagString[7]}.atlas";
+            string SpineFile = $@"assets/{spineRoot}/{tagString[6]}/{tagString[7]}.skel";
+            string DisplayName = tagString[5];
+            if (dormMode)
+            {
+                if (tagString[10] != null)
+                {
+                    if (File.Exists($@"{AppDir}assets/{spineRoot}/{tagString[6]}/{tagString[10]}.atlas"))
+                    { AtlasFile = $@"assets/{spineRoot}/{tagString[6]}/{tagString[10]}.atlas"; }
+                    if (File.Exists($@"{AppDir}assets/{spineRoot}/{tagString[6]}/{tagString[10]}.skel"))
+                    { SpineFile = $@"assets/{spineRoot}/{tagString[6]}/{tagString[10]}.skel"; }
+                    DisplayName = $"{tagString[5]} [宿舍]";
+                }
+            }
+            // 加载前校验数据文件是否存在
+            if (tagString[11] is not null)
+            {
+                foreach (string fname in tagString[11].Split('|', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string fpath = $@"{AppDir}assets/{spineRoot}/{tagString[6]}/{fname}";
+                    if (!File.Exists(fpath))
+                    {
+                        if (!Properties.Settings.Default.SuppressLoadPrompts) GrowlHelper.ErrorGlobal($"加载失败：骨骼数据文件不存在。\n{fpath}");
+                        tvAfterSelect();
+                        return;
+                    }
+                }
+            }
+            ModelLoadRequested?.Invoke(new ChibiModelData
+            {
+                DisplayName = DisplayName,
+                SkeletonFile = SpineFile,
+                AtlasFile = AtlasFile,
+                NewInstance = chb_force_load.IsChecked == true
+            });
+            tvAfterSelect();
+        }
+
+
+        private async void btn_downloadData_Click(object sender, RoutedEventArgs e)
+        {
+            ComponentModel item = SelectedItem;
+            await DownloadData(item.Tag);
+        }
+
+
+        private async Task DownloadData(string[] tagString)
+        {
+            isBusy = true;
+            try
+            {
+                ComponentModel item = SelectedItem;
+                btn_downloadData.IsEnabled = false;
+                btn_downloadData.Visibility = Visibility.Visible;
+                btn_deleteData.IsEnabled = false;
+                btn_deleteData.Visibility = Visibility.Collapsed;
+                btn_loadCG.IsEnabled = false;
+                chb_save_cg.IsEnabled = false;
+                tv_InternalSelector.IsEnabled = false;
+
+                string downloadSource = string.Empty;
+                if (Settings.Default.DownloadSource != string.Empty)
+                {
+                    downloadSource = Settings.Default.DownloadSource + "spine/" + tagString[6];
+                }
+
+                if (tagString[11].Split('|').Count() > 0)
+                {
+                    if (CheckIsUrlFormat(downloadSource))
+                    {
+                        int total_files = tagString[11].Split('|').Count();
+                        pb_loader.Value = 0;
+                        pb_loader.Maximum = total_files;
+                        tii.ProgressState = System.Windows.Shell.TaskbarItemProgressState.Normal;
+
+                        sp_downloader.Visibility = Visibility.Visible;
+                        pb_loader.IsIndeterminate = false;
+                        txt_loader.Text = $"正在下载 {tagString[5]}";
+
+                        KillEmptyDirectory($@"{AppDir}assets/spine");
+
+                        foreach (string filename in tagString[11].Split('|'))
+                        {
+                            txt_loader.Text = $"正在下载 {tagString[5]}：{filename} ({pb_loader.Value}/{total_files})";
+
+                            if (!Directory.Exists($@"{AppDir}assets/spine/{tagString[6]}"))
+                            {
+                                Directory.CreateDirectory($@"{AppDir}assets/spine/{tagString[6]}");
+                            }
+
+                            await HttpClass.DownloadFileAsync(
+                                $"{downloadSource}/{filename}",
+                                $@"{AppDir}assets/spine/{tagString[6]}/{filename}",
+                                (current, total) =>
+                                {
+                                    pb_downloader.Maximum = (int)total;
+                                    pb_downloader.Value = (int)current;
+                                    txt_downloader.Text = $"{current} / {total}";
+                                });
+
+                            pb_loader.Value++;
+                            tii.ProgressValue = pb_loader.Value / pb_loader.Maximum;
+                        }
+
+                        txt_loader.Text = $"已完成下载 {tagString[5]}，等待下一步操作...";
+                        pb_loader.IsIndeterminate = true;
+                        sp_downloader.Visibility = Visibility.Collapsed;
+                        tii.ProgressState = System.Windows.Shell.TaskbarItemProgressState.Indeterminate;
+
+                    }
+                    else
+                    {
+                        GrowlHelper.ErrorGlobal("人形数据下载失败。\nURL 无效。请检查下载源设置。");
+                    }
+                }
+                else
+                {
+                    GrowlHelper.ErrorGlobal("人形数据下载失败。\n服务器端未包含该人形的有效数据。");
+                }
+
+                tv_InternalSelector.IsEnabled = true;
+
+                tvAfterSelect();
+            }
+            finally
+            {
+                isBusy = false;
+            }
+        }
+
+        private void btn_deleteCG_Click(object sender, RoutedEventArgs e)
+        {
+            ComponentModel item = SelectedItem;
+            if (item?.Tag is not string[] tagString || tagString.Length < 10)
+            {
+                return;
+            }
+            var files = new List<string>();
+            foreach (string f in new[] { tagString[8], tagString[9] })
+            {
+                if (string.IsNullOrEmpty(f))
+                {
+                    continue;
+                }
+                string p = $@"{AppDir}assets/pic/{f}";
+                if (File.Exists(p))
+                {
+                    files.Add(p);
+                }
+            }
+            if (files.Count == 0)
+            {
+                GrowlHelper.InfoGlobal($"“{tagString[5]}”没有已下载的立绘数据。");
+                return;
+            }
+            // 立绘正在被立绘窗口显示时禁止删除
+            if (IsCgInUse(tagString[8], tagString[9]))
+            {
+                GrowlHelper.InfoGlobal($"“{tagString[5]}”的立绘正在被显示，无法删除。");
+                return;
+            }
+            MessageBoxResult deleteCGResult = MessageBox.Show($"是否删除人形“{tagString[5]}”的立绘数据？\n\n注意：删除后将无法离线查看该立绘，除非重新下载。", "立绘删除确认", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+            if (deleteCGResult != MessageBoxResult.Yes)
+            {
+                return;
+            }
+            try
+            {
+                foreach (string p in files)
+                {
+                    File.Delete(p);
+                }
+                KillEmptyDirectory($@"{AppDir}assets/pic");
+                img_Preview.Source = null;
+                tvAfterSelect();
+                GrowlHelper.SuccessGlobal($"已删除“{tagString[5]}”的立绘数据。");
+            }
+            catch (System.IO.IOException)
+            {
+                GrowlHelper.ErrorGlobal("删除立绘失败：立绘文件正被占用（可能正在预览或立绘窗口显示中）。\n请关闭立绘窗口后再试。");
+            }
+            catch (Exception ex)
+            {
+                GrowlHelper.ErrorGlobal($"删除立绘失败。\n{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 检查立绘文件是否正被某个立绘窗口（CGWindow）显示。
+        /// </summary>
+        private static bool IsCgInUse(string cg, string cgD)
+        {
+            foreach (Window w in Application.Current.Windows)
+            {
+                if (w is CGWindow win && win.IsVisible &&
+                    (win.DisplayedCgN == cg || win.DisplayedCgN == cgD || win.DisplayedCgD == cg || win.DisplayedCgD == cgD))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void btn_deleteData_Click(object sender, RoutedEventArgs e)
+        {
+            ComponentModel item = SelectedItem;
+            string[] tagString = new string[8];
+            tagString[0] = item.Tag[0];//displaySwitch
+            tagString[1] = item.Tag[1];//content.name;
+            tagString[2] = item.Tag[2];//content.parent;
+            tagString[3] = item.Tag[3];//content.type;
+            tagString[4] = item.Tag[4];//content.display;
+            tagString[5] = item.Tag[5];//content.display_full;
+            tagString[6] = item.Tag[6];//content.path;
+            tagString[7] = item.Tag[7];//content.filename;
+            bool isExternal = tagString[0] == "External";
+            string spineRoot = isExternal ? "spine_external" : "spine";
+            string loadedKey = $"{spineRoot}/{tagString[6]}";
+            if (LoadedPaths.Contains(loadedKey) || (OwnerMainWindow?.GetLoadedPaths().Contains(loadedKey) ?? false))
+            {
+                GrowlHelper.InfoGlobal($"“{tagString[5]}”的数据正在被桌宠使用，无法删除。");
+                return;
+            }
+
+            MessageBoxResult deleteDataResult = MessageBox.Show($"是否删除人形“{tagString[5]}”的骨骼数据？\n\n注意：删除后将无法使用该人形的骨骼数据，除非重新下载。", "数据删除确认", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+            if (deleteDataResult == MessageBoxResult.Yes)
+            {
+                DeleteData(tagString[6]);
+            }
+        }
+
+        private void DeleteData(string dummy)
+        {
+            try
+            {
+                if (Directory.Exists($@"{AppDir}assets/spine/{dummy}"))
+                {
+                    Directory.Delete($@"{AppDir}assets/spine/{dummy}", true);
+                }
+                else if (Directory.Exists($@"{AppDir}assets/spine_external/{dummy}"))
+                {
+                    Directory.Delete($@"{AppDir}assets/spine_external/{dummy}", true);
+                    // 同步从外部数据表移除该条目并写盘
+                    ExternalRoot er = ReadExternalSpineList();
+                    if (er.content != null)
+                    {
+                        er.content.RemoveAll(c => string.Equals(c.path, dummy, StringComparison.OrdinalIgnoreCase));
+                        SaveExternalSpineList(er);
+                    }
+                    // 重载数据列表，移除已删除的外部节点
+                    LoadChibiList();
+                    return;
+                }
+                tvAfterSelect();
+            }
+            catch (System.IO.IOException)
+            {
+                GrowlHelper.ErrorGlobal("删除数据失败：文件正被占用（可能正在被桌宠或立绘窗口使用）。\n请先关闭相关窗口后再试。");
+            }
+            catch (Exception ex)
+            {
+                GrowlHelper.ErrorGlobal($"删除数据失败。\n{ex.Message}");
+            }
+        }
+
+        private void btn_ImportExternalSpine_Click(object sender, RoutedEventArgs e)
+        {
+            ImportExternalDialog dialog = new ImportExternalDialog();
+            dialog.ConfirmRequested += (name, files) => ImportExternalSpine(name, files);
+            HandyControl.Controls.Dialog.Show(dialog);
+        }
+
+        /// <summary>
+        /// 读取外部导入数据表（不存在则返回空表）。
+        /// </summary>
+        private ExternalRoot ReadExternalSpineList()
+        {
+            string path = $"{AppDir}spine_external.json";
+            if (File.Exists(path))
+            {
+                try
+                {
+                    return JsonConvert.DeserializeObject<ExternalRoot>(File.ReadAllText(path)) ?? new ExternalRoot();
+                }
+                catch
+                {
+                }
+            }
+            return new ExternalRoot();
+        }
+
+        private void SaveExternalSpineList(ExternalRoot root)
+        {
+            if (root.meta == null)
+            {
+                root.meta = new ExternalMeta
+                {
+                    uuid = Guid.NewGuid().ToString(),
+                    version = DateTime.Now.ToString("yyyyMMddHHmmss"),
+                    content = "外部导入数据"
+                };
+            }
+            File.WriteAllText($"{AppDir}spine_external.json", JsonConvert.SerializeObject(root, Newtonsoft.Json.Formatting.Indented));
+        }
+
+        /// <summary>
+        /// 导入外部骨骼数据：复制文件到 app\assets\spine_external 下并更新外部数据表。
+        /// </summary>
+        private void ImportExternalSpine(string skinName, string[] files)
+        {
+            try
+            {
+                // 文件数 3-6（基础三件套 + 可选的 r{基名} 文件）
+                if (files.Length < 3 || files.Length > 6)
+                {
+                    HandyControl.Controls.MessageBox.Warning("导入失败：需要选择 3-6 个文件（基础 .atlas/.skel/.png 及可选的 r 开头的宿舍模式数据文件）。", "外部数据导入");
+                    return;
+                }
+                // 仅允许 atlas/skel/png
+                var fileMap = new Dictionary<string, string>(); // 小写文件名 -> 完整路径
+                foreach (string f in files)
+                {
+                    string ext = System.IO.Path.GetExtension(f).ToLowerInvariant();
+                    if (ext != ".atlas" && ext != ".skel" && ext != ".png")
+                    {
+                        HandyControl.Controls.MessageBox.Warning("导入失败：仅支持 .atlas、.skel、.png 文件。", "外部数据导入");
+                        return;
+                    }
+                    fileMap[System.IO.Path.GetFileName(f).ToLowerInvariant()] = f;
+                }
+                // 确定基础基名：非 r{其他skel基名} 形式的 .skel 文件
+                var skelNames = fileMap.Keys.Where(n => n.EndsWith(".skel")).ToList();
+                string baseName = null;
+                foreach (string n in skelNames)
+                {
+                    string bn = System.IO.Path.GetFileNameWithoutExtension(n);
+                    bool isRVersion = skelNames.Any(o => System.IO.Path.GetFileNameWithoutExtension(o) != bn &&
+                        string.Equals(bn, "r" + System.IO.Path.GetFileNameWithoutExtension(o), StringComparison.OrdinalIgnoreCase));
+                    if (!isRVersion)
+                    {
+                        baseName = bn;
+                        break;
+                    }
+                }
+                if (baseName == null)
+                {
+                    HandyControl.Controls.MessageBox.Warning("导入失败：缺少基础 .skel 文件。", "外部数据导入");
+                    return;
+                }
+                // 必须包含基础三文件
+                if (!(fileMap.ContainsKey((baseName + ".atlas").ToLowerInvariant()) &&
+                      fileMap.ContainsKey((baseName + ".png").ToLowerInvariant()) &&
+                      fileMap.ContainsKey((baseName + ".skel").ToLowerInvariant())))
+                {
+                    HandyControl.Controls.MessageBox.Warning($"导入失败：必须包含 {baseName}.atlas、{baseName}.png、{baseName}.skel 三个基础文件。", "外部数据导入");
+                    return;
+                }
+                // 其余文件基名必须为 base 或 r{base}
+                foreach (string n in fileMap.Keys)
+                {
+                    string bn = System.IO.Path.GetFileNameWithoutExtension(n);
+                    if (bn != baseName && !string.Equals(bn, "r" + baseName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        HandyControl.Controls.MessageBox.Warning($"导入失败：额外文件基名必须为 {baseName} 或 r{baseName}。", "外部数据导入");
+                        return;
+                    }
+                }
+                bool hasR = fileMap.Keys.Any(n => string.Equals(System.IO.Path.GetFileNameWithoutExtension(n), "r" + baseName, StringComparison.OrdinalIgnoreCase));
+                string filenameR = hasR ? "r" + baseName : null;
+
+                string dirPath = $@"{AppDir}assets/spine_external/{baseName}";
+                Directory.CreateDirectory(dirPath);
+                foreach (string f in files)
+                {
+                    File.Copy(f, System.IO.Path.Combine(dirPath, System.IO.Path.GetFileName(f)), true);
+                }
+
+                // 更新外部数据表（同名条目覆盖）
+                ExternalRoot root = ReadExternalSpineList();
+                if (root.content == null)
+                {
+                    root.content = new List<ExternalContent>();
+                }
+                root.content.RemoveAll(c => string.Equals(c.name, baseName, StringComparison.OrdinalIgnoreCase) || string.Equals(c.path, baseName, StringComparison.OrdinalIgnoreCase));
+                root.content.Add(new ExternalContent
+                {
+                    name = baseName,
+                    display = skinName,
+                    path = baseName,
+                    filename = baseName,
+                    filename_r = filenameR,
+                    files = string.Join("|", files.Select(f => System.IO.Path.GetFileName(f)))
+                });
+                SaveExternalSpineList(root);
+
+                GrowlHelper.SuccessGlobal($"导入成功：{skinName}。");
+                LoadChibiList();
+            }
+            catch (Exception ex)
+            {
+                GrowlHelper.ErrorGlobal($"导入外部数据失败。\n{ex.Message}");
+            }
+        }
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (isBusy)
+            {
+                e.Cancel = true;
+                GrowlHelper.InfoGlobal("正在进行数据操作，请稍候…");
+            }
+        }
+
+        private void tv_InternalSelector_Unselected(object sender, RoutedEventArgs e)
+        {
+            SelectedItem = null;
+            btn_downloadData.IsEnabled = false;
+            btn_downloadData.Visibility = Visibility.Visible;
+            btn_deleteData.IsEnabled = false;
+            btn_deleteData.Visibility = Visibility.Collapsed;
+
+            btn_loadCG.IsEnabled = false;
+            chb_save_cg.IsEnabled = false;
+            btn_loadData.IsEnabled = false;
+            btn_loadDefaultData.IsEnabled = false;
+            btn_loadDormData.IsEnabled = false;
+            btng_loadData.Visibility = Visibility.Collapsed;
+            img_Preview.Source = null;
+        }
+
+        private void btn_sources_Click(object sender, RoutedEventArgs e)
+        {
+            DownloadSources();
+        }
+        DownloadSourcesDialog _downloadSources = new DownloadSourcesDialog();
+        public void DownloadSources()
+        {
+            HandyControl.Controls.Dialog.Show(_downloadSources);
+        }
+
+        private void SearchBar_SearchStarted(object sender, HandyControl.Data.FunctionEventArgs<string> e)
+        {
+            string queryText = sbQuery.Text;
+            if (queryText != string.Empty)
+            {
+                initializeDataSet.Clear();
+                try
+                {
+                    RootObject rb = ReadChibiList();
+                    btn_LoadChibiList.ToolTip = $"从服务器重新加载数据列表\n当前数据列表版本 {rb.meta.version}";
+                    int total = rb.content.Count;
+
+                    int counter = 0;
+
+                    foreach (Content content in rb.content)
+                    {
+                        counter++;
+                        content.type = content.type ?? "";
+                        content.display = content.display ?? content.name;
+                        content.display_full = content.display_full ?? content.display;
+
+                        if (content.name.Contains(queryText) || content.parent.Contains(queryText) || content.display.Contains(queryText) || content.display_full.Contains(queryText))
+                        {
+                            try
+                            {
+                                ComponentModel node = new ComponentModel();
+                                node.ComponentName = $"dummy_{content.name.Replace(" ", string.Empty)}";
+                                node.Header = content.display;
+                                node.ComponentID = 100 + counter;
+                                node.Tag = CreateTag(content);
+                                node.Foreground = defaultColor;
+                                node.ToolTip = content.display_full;
+                                SetNodeColor(node, content);
+
+                                node.ParentID = 0;
+                                if (content.name == content.parent)
+                                {
+                                    node.Level = 1;
+                                    node.ParentID = 0;
+                                    initializeDataSet.Add(node);
+                                }
+                                else
+                                {
+                                    node.Level = 2;
+                                    node.ParentID = 0;
+                                    foreach (ComponentModel item in initializeDataSet)
+                                    {
+                                        if (item.ComponentName == $"dummy_{content.parent.Replace(" ", string.Empty)}")
+                                        {
+                                            node.ParentID = item.ComponentID;
+                                        }
+                                    }
+                                    initializeDataSet.Add(node);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                GrowlHelper.ErrorGlobal($"构建人形数据列表时出错。\n{ex}");
+                            }
+                        }
+
+                    }
+
+                    //加载数据
+                    tv_InternalSelector.ItemsSource = BuildTree();
+                }
+                catch (Exception ex)
+                {
+                    GrowlHelper.ErrorGlobal($"加载人形数据列表时出错。\n{ex}");
+                }
+                tvAfterSelect();
+            }
+            else
+            {
+                LoadChibiList();
+            }
+        }
+
+        private void chb_thinList_Click(object sender, RoutedEventArgs e)
+        {
+            tv_InternalSelector.SetValue(StyleProperty, (bool)chb_thinList.IsChecked ? Application.Current.Resources["TreeView.Small"] : Application.Current.Resources["TreeViewBaseStyle"]);
+        }
+
+        private void chb_preview_d_Click(object sender, RoutedEventArgs e)
+        {
+            tvAfterSelect();
+        }
+
+        private void btnVersion_Click(object sender, RoutedEventArgs e)
+        {
+            ShowAbout();
+        }
+
+        private void ShowAbout()
+        {
+            OwnerMainWindow?.ShowAbout();
+        }
+
+        private void chb_filterUndownloaded_Click(object sender, RoutedEventArgs e)
+        {
+            filterUndownloaded = (bool)chb_filterUndownloaded.IsChecked;
+            LoadChibiList();
+        }
+    }
+}

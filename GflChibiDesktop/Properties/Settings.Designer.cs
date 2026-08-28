@@ -214,5 +214,41 @@ namespace GflChibiDesktop.Properties {
                 this["DummyFilenameR"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool SuppressLoadPrompts {
+            get {
+                return ((bool)(this["SuppressLoadPrompts"]));
+            }
+            set {
+                this["SuppressLoadPrompts"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool SuppressConnectionErrorPrompts {
+            get {
+                return ((bool)(this["SuppressConnectionErrorPrompts"]));
+            }
+            set {
+                this["SuppressConnectionErrorPrompts"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool ForceOfflineMode {
+            get {
+                return ((bool)(this["ForceOfflineMode"]));
+            }
+            set {
+                this["ForceOfflineMode"] = value;
+            }
+        }
     }
 }

@@ -50,5 +50,14 @@
     <Setting Name="DummyFilenameR" Type="System.String" Scope="User">
       <Value Profile="(Default)">rhk416agent_546</Value>
     </Setting>
+    <Setting Name="SuppressLoadPrompts" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="SuppressConnectionErrorPrompts" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="ForceOfflineMode" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

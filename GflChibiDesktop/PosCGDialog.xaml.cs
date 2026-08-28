@@ -7,8 +7,8 @@ namespace GflChibiDesktop
     /// </summary>
     public partial class PosCGDialog
     {
-        private WindowCG _cg;
-        public PosCGDialog(WindowCG windowCG)
+        private CGWindow _cg;
+        public PosCGDialog(CGWindow windowCG)
         {
             InitializeComponent();
             _cg = windowCG;
@@ -19,10 +19,9 @@ namespace GflChibiDesktop
             nud_height.Maximum = SystemParameters.PrimaryScreenHeight;
             nud_width.Value = _cg.vb_img.Width;
             nud_height.Value = _cg.vb_img.Height;
-            //_cg.Cursor = System.Windows.Input.Cursors.Arrow;
-            nud_posx.Minimum = - SystemParameters.PrimaryScreenWidth;
+            nud_posx.Minimum = -SystemParameters.PrimaryScreenWidth;
             nud_posx.Maximum = SystemParameters.PrimaryScreenWidth;
-            nud_posy.Minimum = - SystemParameters.PrimaryScreenHeight;
+            nud_posy.Minimum = -SystemParameters.PrimaryScreenHeight;
             nud_posy.Maximum = SystemParameters.PrimaryScreenHeight;
             nud_posx.Value = _cg.Left;
             nud_posy.Value = _cg.Top;
@@ -38,19 +37,19 @@ namespace GflChibiDesktop
             _cg.Height = nud_height.Value / dpi;
             _cg.Left = nud_posx.Value;
             _cg.Top = nud_posy.Value;
-            _cg.menuItem_fixed.IsChecked = chb_fixPos.IsChecked.Value;
-        }
-
-        private void btn_OK_Unloaded(object sender, RoutedEventArgs e)
-        {
-            //_cg.Cursor = System.Windows.Input.Cursors.SizeAll;
+            if (chb_fixPos.IsChecked == true)
+            {
+                _cg.menuItem_fixed.IsChecked = true;
+            }
+            else
+            {
+                _cg.menuItem_fixed.IsChecked = false;
+            }
         }
 
         private void UserControl_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
         {
             e.Handled = true;
         }
-
-        //btn_Close.Command.Execute(null);
     }
 }

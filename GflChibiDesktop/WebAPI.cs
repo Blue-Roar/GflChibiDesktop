@@ -14,6 +14,9 @@ namespace GflChibiDesktop
             public string update_link { get; set; }
             public string donate_link { get; set; }
             public string extra_str { get; set; }
+            public string repo_link { get; set; }
+            public string chibi_list_link { get; set; }
+            public string latest { get; set; }
         }
 
         public class IndexRoot
@@ -85,6 +88,19 @@ namespace GflChibiDesktop
             /// <summary>
             /// 
             /// </summary>
+            public string msg { get; set; }
+        }
+
+        public class ChibiListData
+        {
+            public string uuid { get; set; }
+            public string url { get; set; }
+        }
+
+        public class ChibiListRoot
+        {
+            public int ret { get; set; }
+            public ChibiListData data { get; set; }
             public string msg { get; set; }
         }
 

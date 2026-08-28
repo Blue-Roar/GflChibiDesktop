@@ -25,9 +25,9 @@
     <Company>BrightSu</Company>
     <Copyright>© 2020~2026 BrightSu</Copyright>
     <Description>GflChibiDesktop</Description>
-    <AssemblyVersion>1.0.1.1002</AssemblyVersion>
+    <AssemblyVersion>1.1.0.1</AssemblyVersion>
+    <FileVersion>1.1.0.1</FileVersion>
 	<InformationalVersion>20260828</InformationalVersion>
-    <FileVersion>1.0.1.1</FileVersion>
     <PackageProjectUrl>https://projects.brightsu.cn/GflChibiDesktop/V1/</PackageProjectUrl>
   </PropertyGroup>
 
@@ -48,8 +48,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="dummy_list.json">
+    <None Include="chibi_list.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <Link>app\chibi_list.json</Link>
     </None>
   </ItemGroup>
 

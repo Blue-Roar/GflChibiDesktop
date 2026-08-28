@@ -56,9 +56,46 @@ namespace GflChibiDesktop
             }
         }
 
-        public static int GetHttpStatusCode(HttpStatusCode httpStatusCode)
+        /// <summary>
+        /// 异步 POST 请求。返回 (是否成功, 响应内容或错误信息)。
+        /// </summary>
+        public static async System.Threading.Tasks.Task<(bool Success, string Result)> PostWebRequestAsync(string postUrl, string paramData, Encoding dataEncode)
         {
-            switch (httpStatusCode)
+            try
+            {
+                byte[] byteArray = dataEncode.GetBytes(paramData);
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                HttpWebRequest webReq = (HttpWebRequest)WebRequest.Create(new Uri(postUrl));
+                webReq.Method = "POST";
+                webReq.ContentType = "application/x-www-form-urlencoded";
+                webReq.UserAgent = userAgent;
+                webReq.Timeout = 5000;
+                webReq.ContentLength = byteArray.Length;
+
+                using (System.IO.Stream newStream = await webReq.GetRequestStreamAsync())
+                {
+                    await newStream.WriteAsync(byteArray, 0, byteArray.Length);
+                }
+
+                using (HttpWebResponse response = (HttpWebResponse)await webReq.GetResponseAsync())
+                using (StreamReader sr = new StreamReader(response.GetResponseStream(), dataEncode))
+                {
+                    if (response.StatusCode != HttpStatusCode.OK)
+                    {
+                        int statusCode = GetHttpStatusCode(response.StatusCode);
+                        return (false, $"服务器返回了 HTTP 状态码 {statusCode}({response.StatusCode})");
+                    }
+                    return (true, await sr.ReadToEndAsync());
+                }
+            }
+            catch (Exception ex)
+            {
+                return (false, ex.Message);
+            }
+        }
+
+        public static int GetHttpStatusCode(HttpStatusCode httpStatusCode)
+        {            switch (httpStatusCode)
             {
                 case HttpStatusCode.Continue:
                     return 100;

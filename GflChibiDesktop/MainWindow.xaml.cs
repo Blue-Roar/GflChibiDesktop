@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -42,7 +43,7 @@ namespace GflChibiDesktop
         public static ContentControl MasterControl;
         public static UCPlayer UC_Player;
         public static OptionsWindow _options;
-        public static OpenWindow _open;
+        public static DataManagerWindow dataManagerWindow;
         public static SettingsWindow _settings;
         
         public readonly string productName = ((AssemblyProductAttribute)Attribute.GetCustomAttribute(Assembly.GetExecutingAssembly(), typeof(AssemblyProductAttribute))).Product.ToString();
@@ -54,9 +55,15 @@ namespace GflChibiDesktop
         public readonly Version productBuild = Assembly.GetExecutingAssembly().GetName().Version;
         public readonly string currentBuild = ((AssemblyInformationalVersionAttribute)Attribute.GetCustomAttribute(Assembly.GetExecutingAssembly(), typeof(AssemblyInformationalVersionAttribute))).InformationalVersion;
         public string homepageLink = "https://projects.brightsu.cn/gfl-chibi-desktop";
+        public string repoLink = "https://github.com/Blue-Roar/GflChibiDesktop";
         public string updateLink = "https://projects.brightsu.cn/gfl-chibi-desktop/update";
         public string donateLink = "https://projects.brightsu.cn/gfl-chibi-desktop/donate";
         public string extraStr = string.Empty;
+        public string announcementMsg = string.Empty;
+        public string chibiListLink = "https://api.brightsu.cn/GFL/chibi_list";
+
+        /// <summary>当前正在使用的模型目录键（"spine/xxx" 或 "spine_external/xxx"），用于禁止删除正在使用的数据。</summary>
+        private string _loadedPathKey;
 
         System.Windows.Threading.DispatcherTimer dispatcherTimer = new System.Windows.Threading.DispatcherTimer();
 
@@ -152,10 +159,10 @@ namespace GflChibiDesktop
         bool startupAutoRun = false;
         bool silentRun = false;
 
-        public static bool OpenWindowIsOpen = false;
-        public static void OpenWindowState(bool state)
+        public static bool DataManagerWindowIsOpen = false;
+        public static void DataManagerWindowState(bool state)
         {
-            OpenWindowIsOpen = state;
+            DataManagerWindowIsOpen = state;
         }
 
         public static bool AboutWindowIsOpen = false;
@@ -184,6 +191,8 @@ namespace GflChibiDesktop
                         if (CheckIsUrlFormat(rt.data.homepage_link)) { homepageLink = rt.data.homepage_link; }
                         if (CheckIsUrlFormat(rt.data.update_link)) { updateLink = rt.data.update_link; }
                         if (CheckIsUrlFormat(rt.data.donate_link)) { donateLink = rt.data.donate_link; }
+                        if (CheckIsUrlFormat(rt.data.repo_link)) { repoLink = rt.data.repo_link; }
+                        if (CheckIsUrlFormat(rt.data.chibi_list_link)) { chibiListLink = rt.data.chibi_list_link; }
                         extraStr = rt.data.extra_str;
                     }
                     else
@@ -267,17 +276,112 @@ namespace GflChibiDesktop
 
         public void LoadDummy()
         {
-            if (!OpenWindowIsOpen)
+            if (!DataManagerWindowIsOpen)
             {
-                _open = new OpenWindow(this);
-                _open.Show();
+                dataManagerWindow = new DataManagerWindow();
+                dataManagerWindow.OwnerMainWindow = this;
+                dataManagerWindow.LoadedPaths = GetLoadedPaths();
+                dataManagerWindow.ModelLoadRequested += DataManagerWindow_ModelLoadRequested;
+                dataManagerWindow.homepageLink = homepageLink;
+                dataManagerWindow.repoLink = repoLink;
+                dataManagerWindow.updateLink = updateLink;
+                dataManagerWindow.chibiListLink = chibiListLink;
+                dataManagerWindow.announcementMsg = string.IsNullOrEmpty(announcementMsg) ? productTitle : announcementMsg;
+                dataManagerWindow.Closed += (s, e) => DataManagerWindowState(false);
+                DataManagerWindowState(true);
+                dataManagerWindow.Show();
             }
             else
             {
-                _open.Show();
-                _open.WindowState = WindowState.Normal;
-                _open.Focus();
+                dataManagerWindow.Show();
+                dataManagerWindow.WindowState = WindowState.Normal;
+                dataManagerWindow.Focus();
             }
+        }
+
+        /// <summary>
+        /// 数据管理器触发模型加载：自动检测 Spine 版本并加载到桌宠。
+        /// </summary>
+        private void DataManagerWindow_ModelLoadRequested(ChibiModelData data)
+        {
+            try
+            {
+                string appDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app");
+                string atlas = data.AtlasFile;
+                string skel = data.SkeletonFile;
+                if (!System.IO.Path.IsPathRooted(atlas)) atlas = System.IO.Path.Combine(appDir, atlas);
+                if (!System.IO.Path.IsPathRooted(skel)) skel = System.IO.Path.Combine(appDir, skel);
+
+                if (!System.IO.File.Exists(atlas) || !System.IO.File.Exists(skel))
+                {
+                    HandyControl.Controls.Growl.ErrorGlobal("加载失败：骨骼数据文件不存在。");
+                    return;
+                }
+
+                App.globalValues.SelectAtlasFile = atlas;
+                App.globalValues.SelectSpineFile = skel;
+                App.globalValues.DummyDisplayName = data.DisplayName;
+                App.globalValues.IsDormMode = System.IO.Path.GetFileNameWithoutExtension(atlas).StartsWith("r");
+
+                // 持久化所选模型，供启动时恢复
+                string dir = new System.IO.DirectoryInfo(System.IO.Path.GetDirectoryName(atlas)).Name;
+                string file = System.IO.Path.GetFileNameWithoutExtension(atlas);
+                bool isDorm = file.StartsWith("r");
+                string baseName = isDorm ? file.Substring(1) : file;
+                Properties.Settings.Default.DummyPath = dir;
+                Properties.Settings.Default.DummyFilename = baseName;
+                Properties.Settings.Default.DummyFilenameR = "r" + baseName;
+                Properties.Settings.Default.DummyDormMode = isDorm;
+                Properties.Settings.Default.DummyName = dir;
+                Properties.Settings.Default.DummyDisplayName = data.DisplayName;
+                Properties.Settings.Default.Save();
+
+                App.globalValues.Dummy = dir;
+                App.isNew = true;
+                _loadedPathKey = ComputeLoadedKey(atlas);
+
+                LoadPlayer("2.1.25");
+            }
+            catch (Exception ex)
+            {
+                HandyControl.Controls.Growl.ErrorGlobal($"加载失败。\n{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 计算模型目录键（"spine/xxx" 或 "spine_external/xxx"）。
+        /// </summary>
+        private static string ComputeLoadedKey(string atlasPath)
+        {
+            try
+            {
+                int idx = atlasPath.IndexOf("assets", StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                {
+                    string rel = atlasPath.Substring(idx);
+                    string[] parts = rel.Split('\\', '/');
+                    // parts: assets, spine|spine_external, path, filename.atlas
+                    if (parts.Length >= 4 && (parts[1] == "spine" || parts[1] == "spine_external"))
+                        return $"{parts[1]}/{parts[2]}";
+                }
+            }
+            catch
+            {
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 当前正在使用的模型目录键集合。
+        /// </summary>
+        public HashSet<string> GetLoadedPaths()
+        {
+            var set = new HashSet<string>();
+            if (!string.IsNullOrEmpty(_loadedPathKey))
+            {
+                set.Add(_loadedPathKey);
+            }
+            return set;
         }
 
         private void Move_MouseMove(object sender, MouseEventArgs e)
@@ -337,23 +441,32 @@ namespace GflChibiDesktop
             App.globalValues.Dummy = Properties.Settings.Default.DummyName;
             App.globalValues.DummyDisplayName = Properties.Settings.Default.DummyDisplayName;
             App.globalValues.IsDormMode = Properties.Settings.Default.DummyDormMode;
-            if (App.globalValues.IsDormMode)
-            {
-                if (File.Exists($@"{AppDomain.CurrentDomain.BaseDirectory}Resources\spine\{tagString[6]}\{tagString[10]}.atlas"))
-                { App.globalValues.SelectAtlasFile = $@"{AppDomain.CurrentDomain.BaseDirectory}Resources\spine\{tagString[6]}\{tagString[10]}.atlas"; }
-                else
-                { App.globalValues.SelectAtlasFile = $@"{AppDomain.CurrentDomain.BaseDirectory}Resources\spine\{tagString[6]}\{tagString[7]}.atlas"; }
-                App.globalValues.SelectSpineFile = $@"{AppDomain.CurrentDomain.BaseDirectory}Resources\spine\{tagString[6]}\{tagString[10]}.skel";
-            }
-            else
-            {
-                App.globalValues.SelectAtlasFile = $@"{AppDomain.CurrentDomain.BaseDirectory}Resources\spine\{tagString[6]}\{tagString[7]}.atlas";
-                App.globalValues.SelectSpineFile = $@"{AppDomain.CurrentDomain.BaseDirectory}Resources\spine\{tagString[6]}\{tagString[7]}.skel";
-            }
+
             App.globalValues.Alpha = true;
             App.globalValues.PreMultiplyAlpha = true;
             App.globalValues.IsLoop = true;
-            LoadPlayer("2.1.25");
+
+            string spineDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app", "assets", "spine");
+            string atlas = $@"{spineDir}\{tagString[6]}\{tagString[7]}.atlas";
+            string skel = $@"{spineDir}\{tagString[6]}\{tagString[7]}.skel";
+            if (App.globalValues.IsDormMode)
+            {
+                if (File.Exists($@"{spineDir}\{tagString[6]}\{tagString[10]}.atlas"))
+                { atlas = $@"{spineDir}\{tagString[6]}\{tagString[10]}.atlas"; }
+                if (File.Exists($@"{spineDir}\{tagString[6]}\{tagString[10]}.skel"))
+                { skel = $@"{spineDir}\{tagString[6]}\{tagString[10]}.skel"; }
+            }
+            App.globalValues.SelectAtlasFile = atlas;
+            App.globalValues.SelectSpineFile = skel;
+
+            // 仅当数据存在时加载上次选择的模型（避免数据缺失导致启动失败）
+            if (File.Exists(atlas) && File.Exists(skel))
+            {
+                _loadedPathKey = ComputeLoadedKey(atlas);
+                LoadPlayer("2.1.25");
+            }
+
+            // LoadPlayer 内 Common.Reset() 会清空以下设置，需在加载之后设置
             App.globalValues.SelectSkin = "default";
             App.globalValues.SetSkin = true;
             App.globalValues.SelectedAnime = Properties.Settings.Default.DummyAnime;
@@ -1042,7 +1155,7 @@ namespace GflChibiDesktop
         public void DownloadSources()
         {
             LoadDummy();
-            _open.DownloadSources();
+            dataManagerWindow.DownloadSources();
         }
 
         private void mi_disableInteraction_Unchecked(object sender, RoutedEventArgs e)
