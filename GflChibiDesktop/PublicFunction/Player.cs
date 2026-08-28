@@ -20,7 +20,10 @@ public class Player
         graphicsDevice = App.appXC.GraphicsDevice;
         graphicsDevice.PresentationParameters.BackBufferWidth = (int)App.globalValues.FrameWidth;
         graphicsDevice.PresentationParameters.BackBufferHeight = (int)App.globalValues.FrameHeight;
-        spriteBatch = new SpriteBatch(graphicsDevice);
+        if (App.spriteBatch != null)
+            App.spriteBatch.Dispose();
+        App.spriteBatch = new SpriteBatch(graphicsDevice);
+        spriteBatch = App.spriteBatch;
     }
 
     public static void UserControl_SizeChanged(ref GraphicsDevice graphicsDevice)

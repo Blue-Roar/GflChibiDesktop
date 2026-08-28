@@ -471,6 +471,7 @@ namespace GflChibiDesktop
                     Player.Content = null;
                     UC_Player = new UCPlayer();
                     Player.Content = UC_Player;
+                    App.appXC.RequestReload();
                 }
                 else
                 {

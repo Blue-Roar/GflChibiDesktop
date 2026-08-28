@@ -26,7 +26,8 @@ namespace GflChibiDesktop.Views
         public UCPlayer()
         {
             InitializeComponent();
-            App.appXC = new WpfXnaControl.XnaControl();
+            if (App.appXC == null)
+                App.appXC = new MonoGameControl();
 
             switch (App.globalValues.SelectSpineVersion)
             {

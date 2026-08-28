@@ -4,7 +4,6 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Interop;
-using WpfXnaControl;
 
 namespace GflChibiDesktop
 {
@@ -16,7 +15,7 @@ namespace GflChibiDesktop
         public static GlobalValue globalValues = new GlobalValue();
         public static string rootDir = Environment.CurrentDirectory;
         public static string lastDir;
-        public static XnaControl appXC;
+        public static MonoGameControl appXC;
         public static Texture2D textureBG;
 
         public static bool isPress = false;

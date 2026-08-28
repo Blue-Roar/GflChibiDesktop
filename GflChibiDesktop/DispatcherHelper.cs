@@ -1,12 +1,10 @@
 ﻿using System;
 using System.Windows.Threading;
-using System.Security.Permissions;
 
 namespace GflChibiDesktop
 {
     public static class DispatcherHelper
     {
-        [SecurityPermissionAttribute(SecurityAction.Demand, Flags = SecurityPermissionFlag.UnmanagedCode)]
         public static void DoEvents()
         {
             DispatcherFrame frame = new DispatcherFrame();

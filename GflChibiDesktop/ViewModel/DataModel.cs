@@ -1,5 +1,4 @@
-﻿using GalaSoft.MvvmLight;
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Windows.Media;
 
 namespace GflChibiDesktop.Model
